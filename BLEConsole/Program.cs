@@ -9,6 +9,12 @@ using System.Reflection;
 using System.Threading;
 using System.Text.RegularExpressions;
 using System.Diagnostics.Eventing.Reader;
+using System.Runtime.InteropServices;
+using System.IO;
+using System.Text;
+using System.Security.Cryptography;
+using Windows.Security.Cryptography;
+using Windows.Storage.Streams;
 
 namespace BLEConsole
 {
@@ -1332,6 +1338,14 @@ namespace BLEConsole
             }
         }
 
+        enum AggregateDataType { None, VehicleInfo, TripInfo };
+
+        static bool _aggregrateDataInValueChanged = false;
+        static int _aggregrateDataLengthRemaining = 0;
+        static byte[] _aggregateDataArray = null;
+        static AggregateDataType _aggregateDataType = AggregateDataType.None;
+
+        
         /// <summary>
         /// Event handler for ValueChanged callback
         /// </summary>
@@ -1341,14 +1355,183 @@ namespace BLEConsole
         {
             var newValue = Utilities.FormatValueMultipleFormattes(args.CharacteristicValue, _receivedDataFormat);
 
-            if (Console.IsInputRedirected) Console.Write($"{newValue}");
-            else Console.Write($"Value changed for {sender.Uuid} ({args.CharacteristicValue.Length} bytes):\n{newValue}\nBLE: ");
+            var tempValue = Utilities.FormatValue(args.CharacteristicValue, DataFormat.UTF8);
+
+            bool startAggregation = false;
+
+            if (tempValue.StartsWith("VH="))
+            {
+                _aggregateDataType = AggregateDataType.VehicleInfo;
+                startAggregation = true;
+            }
+            else if (tempValue.StartsWith("TP="))
+            {
+                _aggregateDataType = AggregateDataType.TripInfo;
+                startAggregation = true;
+            }
+
+            if (startAggregation)
+            {
+                var parts = tempValue.Split('=');
+                var parts2 = parts[1].Split('\n');
+                _aggregrateDataLengthRemaining = Convert.ToInt32(parts2[0], 16);
+
+                parts = tempValue.Split('\n');
+
+                byte[] data;
+                CryptographicBuffer.CopyToByteArray(args.CharacteristicValue, out data);
+                _aggregateDataArray = data.Skip(parts[0].Length+1).ToArray();
+                _aggregrateDataLengthRemaining -= _aggregateDataArray.Length;
+
+                if (_aggregrateDataLengthRemaining > 0)
+                    _aggregrateDataInValueChanged = true;
+
+                if (Console.IsInputRedirected) Console.Write($"{parts[0]}");
+                else Console.Write($"Value changed for {sender.Uuid} ({parts[0].Length} bytes):\n{parts[0]}\n*** Aggregating data (captured {parts2[1].Length} bytes {_aggregrateDataLengthRemaining} bytes remaining) ***\nBLE: ");
+            }
+            else if (_aggregrateDataInValueChanged)
+            {
+                byte[] data;
+                CryptographicBuffer.CopyToByteArray(args.CharacteristicValue, out data);
+
+                _aggregateDataArray = _aggregateDataArray.Concat(data).ToArray();
+                _aggregrateDataLengthRemaining -= (int)args.CharacteristicValue.Length;
+
+                if (_aggregrateDataLengthRemaining <= 0)
+                {
+                    _aggregrateDataInValueChanged = false;
+
+                    if (_aggregateDataType == AggregateDataType.VehicleInfo)
+                    {
+                        var info = ExtractVehicleInfo(_aggregateDataArray);
+
+                        Console.Write($"Value change aggregated for {sender.Uuid}\n");
+                        Console.Write($"\tName: {info._name}\n");
+                        Console.Write($"\tOdometer: {info._odometer}\n");
+                        Console.Write($"\tEngine Hours: {info._engineHours}\n");
+                        Console.Write($"\tOdometer Base: {info._odometerBase}\n");
+                        Console.Write($"\tEngine Hours Base: {info._engineHoursBase}\n");
+                        Console.Write($"\tFuel Capacity: {info._fuelCapacity}\n");
+                        Console.Write($"\tFuel Reserve: {info._fuelReserve}\n");
+                        Console.Write($"\tFuel Fillup Mileage: {info._fuelFillUpMileage}\n");
+                        Console.Write($"\tOil Change Interval: {info._fuelFillUpMileage}\n");
+                        Console.Write($"\tOil Change Mileage: {info._oilChangeMileage}\n");
+                    }
+                    else if (_aggregateDataType == AggregateDataType.TripInfo)
+                    {
+                        var info = ExtractTripInfoData(_aggregateDataArray);
+
+                        Console.Write($"Value change aggregated for {sender.Uuid}\n");
+                        Console.Write($"Trip Info (Type: {info._type})");
+                        if (info._type.Contains("L")) Console.WriteLine($" {info._id}:");
+                        else Console.WriteLine(":");
+
+                        DateTime start = new DateTime(1970, 1, 1).ToLocalTime().AddSeconds(info._startTime);
+                        DateTime end = new DateTime(1970, 1, 1).ToLocalTime().AddSeconds(info._endTime);
+
+                        Console.WriteLine($"\tStart Time: {info._startTime} ({start})");
+                        Console.WriteLine($"\tEnd Time: {info._endTime} ({end}");
+                        Console.WriteLine($"\tStart Odometer: {info._startOdometer}");
+                        Console.WriteLine($"\tEnd Odometer: {info._endOdometer}");
+                        Console.WriteLine($"\tStart Engine Hours: {info._startEngineHours}");
+                        Console.WriteLine($"\tEnd Engine Hours: {info._endEngineHours}");
+                        Console.WriteLine($"\tStart Fuel: {info._startFuel}");
+                        Console.WriteLine($"\tEnd Fuel: {info._endFuel}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Error: Unknown aggregation type {_aggregateDataType}");
+                    }
+                }
+                else
+                {
+                    if (!Console.IsInputRedirected) Console.Write($"Value changed for {sender.Uuid} ({args.CharacteristicValue.Length} bytes)\n *** Aggregating data (captured {_aggregateDataArray.Length} bytes {_aggregrateDataLengthRemaining} bytes remaining) ***\nBLE: ");
+                }
+            }
+            else
+            {
+                if (Console.IsInputRedirected) Console.Write($"{newValue}");
+                else Console.Write($"Value changed for {sender.Uuid} ({args.CharacteristicValue.Length} bytes):\n{newValue}\nBLE: ");
+            }
+
             if (_notifyCompleteEvent != null)
             {
                 _notifyCompleteEvent.Set();
                 _notifyCompleteEvent = null;
             }
         }
+
+
+        struct VehicleInfoData
+        {
+            public string _name;
+            public double _odometer;
+            public double _engineHours;
+            public double _odometerBase;
+            public double _engineHoursBase;
+            public double _fuelCapacity;
+            public double _fuelReserve;
+            public double _fuelFillUpMileage;
+            public double _oilChangeInterval;
+            public double _oilChangeMileage;
+        };
+
+        static VehicleInfoData ExtractVehicleInfo(byte[] data)
+        {
+            VehicleInfoData info = new VehicleInfoData();
+
+            using (MemoryStream stream = new MemoryStream(data))
+            using (BinaryReader reader = new BinaryReader(stream))
+            {
+                info._name = new string(reader.ReadChars(10));
+                info._odometer = reader.ReadDouble();
+                info._engineHours = reader.ReadDouble();
+                info._odometerBase = reader.ReadDouble();
+                info._engineHoursBase = reader.ReadDouble();
+                info._fuelCapacity = reader.ReadDouble();
+                info._fuelReserve = reader.ReadDouble();
+                info._fuelFillUpMileage = reader.ReadDouble();
+                info._oilChangeInterval = reader.ReadDouble();
+                info._oilChangeMileage = reader.ReadDouble();
+            }
+            return info;
+        }
+
+        struct TripInfoData
+        {
+            public string _type;
+            public uint _id;
+            public uint _startTime;
+            public uint _endTime;
+            public double _startOdometer;
+            public double _endOdometer;
+            public double _startEngineHours;
+            public double _endEngineHours;
+            public double _startFuel;
+            public double _endFuel;
+        };
+
+        static TripInfoData ExtractTripInfoData(byte[] data)
+        {
+            TripInfoData info = new TripInfoData();
+
+            using (MemoryStream stream = new MemoryStream(data))
+            using (BinaryReader reader = new BinaryReader(stream))
+            {
+                info._type = new string(reader.ReadChars(1));
+                info._id = reader.ReadUInt32();
+                info._startTime = reader.ReadUInt32();
+                info._endTime   = reader.ReadUInt32();
+                info._startOdometer = reader.ReadDouble();
+                info._endOdometer = reader.ReadDouble();
+                info._startEngineHours = reader.ReadDouble();
+                info._endEngineHours = reader.ReadDouble();
+                info._startFuel = reader.ReadDouble();
+                info._endFuel = reader.ReadDouble();
+            }
+            return info;
+        }
+
 
         static DeviceInformation FindKnownDevice(string deviceId)
         {
