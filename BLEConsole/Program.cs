@@ -1414,7 +1414,7 @@ namespace BLEConsole
                         Console.Write($"\tFuel Capacity: {info._fuelCapacity}\n");
                         Console.Write($"\tFuel Reserve: {info._fuelReserve}\n");
                         Console.Write($"\tFuel Fillup Mileage: {info._fuelFillUpMileage}\n");
-                        Console.Write($"\tOil Change Interval: {info._fuelFillUpMileage}\n");
+                        Console.Write($"\tOil Change Interval: {info._oilChangeInterval}\n");
                         Console.Write($"\tOil Change Mileage: {info._oilChangeMileage}\n");
                     }
                     else if (_aggregateDataType == AggregateDataType.TripInfo)
