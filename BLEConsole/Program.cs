@@ -204,10 +204,6 @@ namespace BLEConsole
                             }
                         }
                     }
-                    if (TripTracker.PendingWork)
-                    {
-                        await TripTracker.RequestTripData();
-                    }
                 }
                 catch (Exception error)
                 {

@@ -14,13 +14,15 @@ namespace BLEConsole
     public static class TripTracker
     {
         enum AggregateDataType { None, VehicleInfo, TripInfo };
+        enum PendingWorkType { None, RequestData, ProcessResults, Done };
 
         static bool _aggregrateDataInValueChanged = false;
         static int _aggregrateDataLengthRemaining = 0;
         static byte[] _aggregateDataArray = null;
         static AggregateDataType _aggregateDataType = AggregateDataType.None;
-        public static bool PendingWork { get; set; } = false;
+        static PendingWorkType PendingWork { get; set; } = PendingWorkType.None;
         static int NumLegs { get; set; } = 0;
+
         public static bool Debug { get; set; } = false;
 
         public static List<TripInfo> TripInfoList { get; set; } = new List<TripInfo>();
@@ -43,6 +45,9 @@ namespace BLEConsole
                     result += await Program.SubscribeToCharacteristic("#0"); // SimpleKeyState
                 }
 
+                // start the listener for processing the results
+                PendingWork = PendingWorkType.None;
+
                 if ( result == 0)
                 {
                     // request the number of Legs in the current Day
@@ -50,7 +55,10 @@ namespace BLEConsole
                     result += await Program.WriteCharacteristic("#0 LC?");
                     Thread.Sleep(200);
                 }
-
+                if (result == 0)
+                {
+                    await ProcessPendingWork();
+                }
             }
             catch (Exception ex)
             {
@@ -60,11 +68,36 @@ namespace BLEConsole
             return result;
         }
 
+
+        public static async Task ProcessPendingWork()
+        {
+            while (PendingWork != PendingWorkType.Done)
+            {
+
+                if (Debug) Console.WriteLine($"ProcessPendingWork {PendingWork}");
+
+                switch (PendingWork)
+                {
+                    case PendingWorkType.RequestData:
+                        PendingWork = PendingWorkType.None;
+                        await RequestTripData();
+                        break;
+
+                    case PendingWorkType.ProcessResults:
+                        PendingWork = PendingWorkType.Done;
+                        await ProcessTripData();
+                        break;
+
+                    default:
+                        Thread.Sleep(200);
+                        break;
+                }
+            }
+        }
+
         public static async Task RequestTripData()
         {
             int result = 0;
-
-            PendingWork = false;
 
             try
             {
@@ -104,6 +137,25 @@ namespace BLEConsole
             }
         }
 
+        public static async Task ProcessTripData()
+        {
+            Console.WriteLine("Vehicle Info");
+            VehicleInfo.Print();
+
+            for (int i = 0; i < TripInfoList.Count; i++)
+            {
+                if (i == 0)
+                {
+                    Console.WriteLine($"Day Info"); ;
+                }
+                else
+                {
+                    Console.WriteLine($"Trip Leg {i} Info");
+                }
+                TripInfoList[i].Print();
+            }
+        }
+
         /// <summary>
         /// Event handler for ValueChanged callback
         /// </summary>
@@ -121,7 +173,7 @@ namespace BLEConsole
                 var parts = tempValue.Split('=');
                 var parts2 = parts[1].Split('\n');
                 NumLegs = Convert.ToInt32(parts2[0],10);
-                PendingWork = true;
+                PendingWork = PendingWorkType.RequestData;
                 if (Debug) Console.Write($"\nValue changed for {sender.Uuid} processing {parts[0]}={parts2[0]}\n");
 
                 processed = true;
@@ -179,17 +231,18 @@ namespace BLEConsole
                     if (_aggregateDataType == AggregateDataType.VehicleInfo)
                     {
                         VehicleInfo = new VehicleInfo(_aggregateDataArray);
-                        Console.WriteLine("Vehicle Info");
-                        VehicleInfo.Print();
-                        
                     }
                     else if (_aggregateDataType == AggregateDataType.TripInfo)
                     {
                         var info = new TripInfo(_aggregateDataArray);
                         TripInfoList.Add(info);
 
-                        Console.WriteLine("Trip Leg Info");
-                        info.Print();
+                        // we have all the requested data 
+                        // day summary is first, and then NumLegs 
+                        if (TripInfoList.Count >= NumLegs + 1)
+                        {
+                            PendingWork = PendingWorkType.ProcessResults;
+                        }
                     }
                     else
                     {
@@ -285,11 +338,16 @@ namespace BLEConsole
 
         public void Print()
         {
-            DateTime start = new DateTime(1970, 1, 1).ToLocalTime().AddSeconds(StartTime);
-            DateTime end = new DateTime(1970, 1, 1).ToLocalTime().AddSeconds(EndTime);
+            //var PDToffset = -7;  // UTC -7
+            DateTime start = new DateTime(1970, 1, 1).AddSeconds(StartTime);
+            //DateTime startPDT = start.AddHours(PDToffset);
+            DateTime startLocal = start.ToLocalTime();
+            DateTime end = new DateTime(1970, 1, 1).AddSeconds(EndTime);
+            //DateTime endPDT = end.AddHours(PDToffset);
+            DateTime endLocal = end.ToLocalTime(); ;
 
-            Console.WriteLine($"\tStart Time: {StartTime} ({start})");
-            Console.WriteLine($"\tEnd Time: {EndTime} ({end}");
+            Console.WriteLine($"\tStart Time: {StartTime} ({startLocal})");
+            Console.WriteLine($"\tEnd Time: {EndTime} ({endLocal})");
             Console.WriteLine($"\tStart Odometer: {StartOdometer:F1}");
             Console.WriteLine($"\tEnd Odometer: {EndOdometer:F1}");
             Console.WriteLine($"\tStart Engine Hours: {StartEngineHours:F1}");
