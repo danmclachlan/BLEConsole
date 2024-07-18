@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Office.Interop.Excel;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Printers;
 using Windows.Security.Cryptography;
+using Excel = Microsoft.Office.Interop.Excel;
 
 namespace BLEConsole
 {
@@ -48,7 +50,7 @@ namespace BLEConsole
                 // start the listener for processing the results
                 PendingWork = PendingWorkType.None;
 
-                if ( result == 0)
+                if (result == 0)
                 {
                     // request the number of Legs in the current Day
                     // result will be processed in the Characteristic_ValueChanged Handler
@@ -85,7 +87,7 @@ namespace BLEConsole
 
                     case PendingWorkType.ProcessResults:
                         PendingWork = PendingWorkType.Done;
-                        await ProcessTripData();
+                        ProcessTripData();
                         break;
 
                     default:
@@ -137,7 +139,9 @@ namespace BLEConsole
             }
         }
 
-        public static async Task ProcessTripData()
+        enum ExcelInsertType { DayStart, LegStart, LegEnd, DayEnd };
+
+        public static void ProcessTripData()
         {
             Console.WriteLine("Vehicle Info");
             VehicleInfo.Print();
@@ -153,6 +157,111 @@ namespace BLEConsole
                     Console.WriteLine($"Trip Leg {i} Info");
                 }
                 TripInfoList[i].Print();
+            }
+
+            Application excelApp = new Excel.Application();
+            // Make the object visible.
+            //excelApp.Visible = true;
+            var filename = "C:\\Users\\drmcl\\GitHub\\Temp\\CA-2024-07-Trip.xlsx";
+
+            Console.Write($"Writing data to Excel: {filename} ...");
+
+            Workbook workbook = excelApp.Workbooks.Open("C:\\Users\\drmcl\\GitHub\\Temp\\CA-2024-07-Trip.xlsx");
+            Worksheet worksheet = workbook.Sheets[1];
+
+            ListObject table = worksheet.ListObjects["TripDetail"];
+
+            // Adjusting to make the fuel consumed for the day be the sum of all the legs
+            // because there will be cases where the tank is filled between legs.
+            // Also account for any fuel consumption between the beginning of the day and the first leg
+            // and the fuel consumed after the last leg but before the end of the day.
+            double fuelUsed = 0;
+
+            for (int i = 0; i < TripInfoList.Count; i++)
+            {
+                if (i == 0)
+                {
+                    InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.DayStart, TripInfoList[i]);
+                    if (i+1 < TripInfoList.Count)
+                    {
+                        fuelUsed += TripInfoList[0].StartFuel - TripInfoList[1].StartFuel;
+                    }
+                }
+                else
+                {
+                    InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.LegStart, TripInfoList[i]);
+                    InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.LegEnd, TripInfoList[i]);
+                    fuelUsed += TripInfoList[i].FuelUsed;
+                }
+            }
+            TripInfoList[0].FuelUsed = fuelUsed + 
+                (TripInfoList[TripInfoList.Count - 1].EndFuel - TripInfoList[0].EndFuel);
+            InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.DayEnd, TripInfoList[0]);
+
+            workbook.Save();
+            workbook.Close();
+            excelApp.Quit();
+            Console.WriteLine("Complete");
+        }
+
+        // DateTime	Vehicle	Tow	Type	Description	Odometer	Engine Hrs Counter	Fuel	duration	distance	Engine Hrs	Fuel Used
+
+        static void InsertRowIntoTable(ListObject table,
+            string vehicle, string towVehicle,
+            ExcelInsertType insertType,
+            TripInfo trip)
+        {
+            ListRow newRow = table.ListRows.Add();
+
+            newRow.Range[1, 2].Value = vehicle;
+            newRow.Range[1, 3].Value = towVehicle;
+
+            switch (insertType)
+            {
+                case ExcelInsertType.DayStart:
+                    newRow.Range[1, 4].Value = "DayStart";
+                    break;
+                case ExcelInsertType.DayEnd:
+                    newRow.Range[1, 4].Value = "DayEnd";
+                    break;
+                case ExcelInsertType.LegStart:
+                    newRow.Range[1, 4].Value = "Start";
+                    break;
+                case ExcelInsertType.LegEnd:
+                    newRow.Range[1, 4].Value = "End";
+                    break;
+            }
+
+            switch (insertType)
+            {
+                case ExcelInsertType.DayStart:
+                case ExcelInsertType.LegStart:
+                    newRow.Range[1, 1].Value = trip.StartLocalTime;
+                    newRow.Range[1, 6].Value = trip.StartOdometer;
+                    newRow.Range[1, 7].Value = trip.StartEngineHours;
+                    newRow.Range[1, 8].Value = trip.StartFuel;
+                    break;
+                case ExcelInsertType.DayEnd:
+                case ExcelInsertType.LegEnd:
+                    newRow.Range[1, 1].Value = trip.EndLocalTime;
+                    newRow.Range[1, 6].Value = trip.EndOdometer;
+                    newRow.Range[1, 7].Value = trip.EndEngineHours;
+                    newRow.Range[1, 8].Value = trip.EndFuel; 
+                    
+                    TimeSpan dateDifference = trip.EndTimeGMT - trip.StartTimeGMT;
+                    newRow.Range[1, 9].Value = dateDifference.TotalSeconds / 86400; // Excel stores time as a fraction of a day
+                    newRow.Range[1,10].Value = trip.EndOdometer - trip.StartOdometer;
+                    newRow.Range[1,11].Value = trip.EndEngineHours - trip.StartEngineHours;
+                    newRow.Range[1,12].Value = trip.FuelUsed;
+
+                    break;
+            }
+            for (int i = 6; i <= 12; i++)
+            {
+                if (i == 9)
+                    newRow.Range[1, i].NumberFormat = "[h]:mm:ss";
+                else 
+                    newRow.Range[1, i].NumberFormat = "0.0";
             }
         }
 
@@ -172,7 +281,7 @@ namespace BLEConsole
             {
                 var parts = tempValue.Split('=');
                 var parts2 = parts[1].Split('\n');
-                NumLegs = Convert.ToInt32(parts2[0],10);
+                NumLegs = Convert.ToInt32(parts2[0], 10);
                 PendingWork = PendingWorkType.RequestData;
                 if (Debug) Console.Write($"\nValue changed for {sender.Uuid} processing {parts[0]}={parts2[0]}\n");
 
@@ -310,6 +419,10 @@ namespace BLEConsole
         public string Type { get; set; }
         public uint Id { get; set; }
         public uint StartTime { get; set; }
+        public DateTime StartTimeGMT { get { return new DateTime(1970, 1, 1).AddSeconds(StartTime); } }
+        public DateTime StartLocalTime { get { return StartTimeGMT.ToLocalTime(); } }
+        public DateTime EndTimeGMT { get {  return new DateTime(1970, 1, 1).AddSeconds(EndTime); } }
+        public DateTime EndLocalTime { get { return EndTimeGMT.ToLocalTime(); } }
         public uint EndTime { get; set; }
         public double StartOdometer { get; set; }
         public double EndOdometer { get; set; }
@@ -317,6 +430,7 @@ namespace BLEConsole
         public double EndEngineHours { get; set; }
         public double StartFuel { get; set; }
         public double EndFuel { get; set; }
+        public double FuelUsed {  get; set; }
 
         public TripInfo(byte[] data)
         {
@@ -333,21 +447,22 @@ namespace BLEConsole
                 EndEngineHours = reader.ReadDouble();
                 StartFuel = reader.ReadDouble();
                 EndFuel = reader.ReadDouble();
+                FuelUsed = StartFuel - EndFuel;
             }
         }
 
         public void Print()
         {
             //var PDToffset = -7;  // UTC -7
-            DateTime start = new DateTime(1970, 1, 1).AddSeconds(StartTime);
+            //DateTime start = new DateTime(1970, 1, 1).AddSeconds(StartTime);
             //DateTime startPDT = start.AddHours(PDToffset);
-            DateTime startLocal = start.ToLocalTime();
-            DateTime end = new DateTime(1970, 1, 1).AddSeconds(EndTime);
+            //DateTime startLocal = start.ToLocalTime();
+            //DateTime end = new DateTime(1970, 1, 1).AddSeconds(EndTime);
             //DateTime endPDT = end.AddHours(PDToffset);
-            DateTime endLocal = end.ToLocalTime(); ;
+            //DateTime endLocal = end.ToLocalTime();
 
-            Console.WriteLine($"\tStart Time: {StartTime} ({startLocal})");
-            Console.WriteLine($"\tEnd Time: {EndTime} ({endLocal})");
+            Console.WriteLine($"\tStart Time: {StartTime} ({StartLocalTime})");
+            Console.WriteLine($"\tEnd Time: {EndTime} ({EndLocalTime})");
             Console.WriteLine($"\tStart Odometer: {StartOdometer:F1}");
             Console.WriteLine($"\tEnd Odometer: {EndOdometer:F1}");
             Console.WriteLine($"\tStart Engine Hours: {StartEngineHours:F1}");
