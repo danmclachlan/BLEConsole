@@ -164,7 +164,7 @@ namespace BLEConsole
             //excelApp.Visible = true;
             var filename = "C:\\Users\\drmcl\\GitHub\\Temp\\CA-2024-07-Trip.xlsx";
 
-            Console.Write($"Writing data to Excel: {filename} ...");
+            Console.Write($"Writing data to Excel: {filename} ... ");
 
             Workbook workbook = excelApp.Workbooks.Open("C:\\Users\\drmcl\\GitHub\\Temp\\CA-2024-07-Trip.xlsx");
             Worksheet worksheet = workbook.Sheets[1];
@@ -182,20 +182,30 @@ namespace BLEConsole
                 if (i == 0)
                 {
                     InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.DayStart, TripInfoList[i]);
-                    if (i+1 < TripInfoList.Count)
-                    {
+                    // Capture fuel used from DayStart to beginning of Leg1
+                    if (i + 1 < TripInfoList.Count)
                         fuelUsed += TripInfoList[0].StartFuel - TripInfoList[1].StartFuel;
-                    }
                 }
                 else
                 {
                     InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.LegStart, TripInfoList[i]);
                     InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.LegEnd, TripInfoList[i]);
+                    // Capture fuel used during leg[i]
                     fuelUsed += TripInfoList[i].FuelUsed;
+                    // Cature the fuel used between the end of the current Leg and the start of the next leg
+                    // As long as tank amount at the start of the next leg is less than the ending value of the
+                    // current leg otherwise it means that fuel was added and should not be included
+                    if ((i + 1 < TripInfoList.Count) && (TripInfoList[i + 1].StartFuel < TripInfoList[i].EndFuel))
+                        fuelUsed += TripInfoList[i].EndFuel - TripInfoList[i + 1].StartFuel;
                 }
             }
-            TripInfoList[0].FuelUsed = fuelUsed + 
-                (TripInfoList[TripInfoList.Count - 1].EndFuel - TripInfoList[0].EndFuel);
+            // as long as there is at least 1 leg, capture the fuel used from the end of the last leg until the
+            // end of the day and it to the fuel used that has been accumulated then store it back into the 
+            // Day Information.
+            if (TripInfoList.Count > 1)
+                TripInfoList[0].FuelUsed = fuelUsed + 
+                    (TripInfoList[TripInfoList.Count - 1].EndFuel - TripInfoList[0].EndFuel);
+
             InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.DayEnd, TripInfoList[0]);
 
             workbook.Save();
@@ -204,13 +214,17 @@ namespace BLEConsole
             Console.WriteLine("Complete");
         }
 
-        // DateTime	Vehicle	Tow	Type	Description	Odometer	Engine Hrs Counter	Fuel	duration	distance	Engine Hrs	Fuel Used
+        // DateTime	Vehicle	Tow	Type	Description	gallons	Price	Odometer	Engine Hrs Counter	Fuel Level	Leg Duration	Day Duration	Distance Traveled	Engine Hrs Used	Fuel Used
+
+        static TimeSpan legDurationSum { get; set; } = new TimeSpan(0);
 
         static void InsertRowIntoTable(ListObject table,
             string vehicle, string towVehicle,
             ExcelInsertType insertType,
             TripInfo trip)
         {
+            TimeSpan legDuration;
+
             ListRow newRow = table.ListRows.Add();
 
             newRow.Range[1, 2].Value = vehicle;
@@ -219,16 +233,17 @@ namespace BLEConsole
             switch (insertType)
             {
                 case ExcelInsertType.DayStart:
-                    newRow.Range[1, 4].Value = "DayStart";
+                    newRow.Range[1, 4].Value = "Start";
+                    legDurationSum = new TimeSpan(0);
                     break;
                 case ExcelInsertType.DayEnd:
-                    newRow.Range[1, 4].Value = "DayEnd";
+                    newRow.Range[1, 4].Value = "End";
                     break;
                 case ExcelInsertType.LegStart:
-                    newRow.Range[1, 4].Value = "Start";
+                    newRow.Range[1, 4].Value = "Depart";
                     break;
                 case ExcelInsertType.LegEnd:
-                    newRow.Range[1, 4].Value = "End";
+                    newRow.Range[1, 4].Value = "Arrive";
                     break;
             }
 
@@ -237,28 +252,43 @@ namespace BLEConsole
                 case ExcelInsertType.DayStart:
                 case ExcelInsertType.LegStart:
                     newRow.Range[1, 1].Value = trip.StartLocalTime;
-                    newRow.Range[1, 6].Value = trip.StartOdometer;
-                    newRow.Range[1, 7].Value = trip.StartEngineHours;
-                    newRow.Range[1, 8].Value = trip.StartFuel;
+                    newRow.Range[1, 8].Value = trip.StartOdometer;
+                    newRow.Range[1, 9].Value = trip.StartEngineHours;
+                    newRow.Range[1,10].Value = trip.StartFuel;
                     break;
                 case ExcelInsertType.DayEnd:
                 case ExcelInsertType.LegEnd:
                     newRow.Range[1, 1].Value = trip.EndLocalTime;
-                    newRow.Range[1, 6].Value = trip.EndOdometer;
-                    newRow.Range[1, 7].Value = trip.EndEngineHours;
-                    newRow.Range[1, 8].Value = trip.EndFuel; 
-                    
-                    TimeSpan dateDifference = trip.EndTimeGMT - trip.StartTimeGMT;
-                    newRow.Range[1, 9].Value = dateDifference.TotalSeconds / 86400; // Excel stores time as a fraction of a day
-                    newRow.Range[1,10].Value = trip.EndOdometer - trip.StartOdometer;
-                    newRow.Range[1,11].Value = trip.EndEngineHours - trip.StartEngineHours;
-                    newRow.Range[1,12].Value = trip.FuelUsed;
+                    newRow.Range[1, 8].Value = trip.EndOdometer;
+                    newRow.Range[1, 9].Value = trip.EndEngineHours;
+                    newRow.Range[1,10].Value = trip.EndFuel;
+
+                    legDuration = trip.EndTimeGMT - trip.StartTimeGMT;
+                    if (insertType == ExcelInsertType.LegEnd)
+                    {
+                        newRow.Range[1,11].Value = legDuration.TotalSeconds / 86400; // Excel stores time as a fraction of a day
+                        legDurationSum += legDuration;
+                    }
+                    else
+                    {
+                        newRow.Range[1,11].Value = legDurationSum.TotalSeconds / 86400; // Excel stores time as a fraction of a day
+                        newRow.Range[1,12].Value = legDuration.TotalSeconds / 86400; // Excel stores time as a fraction of a day
+                    }
+                    newRow.Range[1,13].Value = trip.EndOdometer - trip.StartOdometer;
+                    newRow.Range[1,14].Value = trip.EndEngineHours - trip.StartEngineHours;
+                    newRow.Range[1,15].Value = trip.FuelUsed;
+                    if (trip.FuelUsed > 0)
+                        newRow.Range[1, 16].Value = (trip.EndOdometer - trip.StartOdometer) / trip.FuelUsed;
 
                     break;
             }
-            for (int i = 6; i <= 12; i++)
+            for (int i = 6; i <= 16; i++)
             {
-                if (i == 9)
+                if (i == 6)
+                    newRow.Range[1, i].NumberFormat = "0.000";
+                else if (i == 7)
+                    newRow.Range[1, i].NumberFormat = "$0.00";
+                if (i == 11 || i == 12)
                     newRow.Range[1, i].NumberFormat = "[h]:mm:ss";
                 else 
                     newRow.Range[1, i].NumberFormat = "0.0";

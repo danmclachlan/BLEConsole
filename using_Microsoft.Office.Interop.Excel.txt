@@ -1,0 +1,20 @@
+using Excel = Microsoft.Office.Interop.Excel;
+
+class Program
+{
+    static void Main()
+    {
+        // Create an Excel application
+        var xlApp = new Excel.Application();
+        var xlWorkbook = xlApp.Workbooks.Open(@"path\to\your\excel.xlsx");
+        var xlWorksheet = (Excel.Worksheet)xlWorkbook.Sheets[1];
+        var xlRange = xlWorksheet.UsedRange;
+
+        // Read data from cells
+        var cellValue = xlRange.Cells[1, 1].Value;
+
+        // Clean up
+        xlWorkbook.Close(false);
+        xlApp.Quit();
+    }
+}
