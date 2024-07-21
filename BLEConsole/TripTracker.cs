@@ -171,40 +171,18 @@ namespace BLEConsole
 
             ListObject table = worksheet.ListObjects["TripDetail"];
 
-            // Adjusting to make the fuel consumed for the day be the sum of all the legs
-            // because there will be cases where the tank is filled between legs.
-            // Also account for any fuel consumption between the beginning of the day and the first leg
-            // and the fuel consumed after the last leg but before the end of the day.
-            double fuelUsed = 0;
-
             for (int i = 0; i < TripInfoList.Count; i++)
             {
                 if (i == 0)
                 {
                     InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.DayStart, TripInfoList[i]);
-                    // Capture fuel used from DayStart to beginning of Leg1
-                    if (i + 1 < TripInfoList.Count)
-                        fuelUsed += TripInfoList[0].StartFuel - TripInfoList[1].StartFuel;
                 }
                 else
                 {
                     InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.LegStart, TripInfoList[i]);
                     InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.LegEnd, TripInfoList[i]);
-                    // Capture fuel used during leg[i]
-                    fuelUsed += TripInfoList[i].FuelUsed;
-                    // Cature the fuel used between the end of the current Leg and the start of the next leg
-                    // As long as tank amount at the start of the next leg is less than the ending value of the
-                    // current leg otherwise it means that fuel was added and should not be included
-                    if ((i + 1 < TripInfoList.Count) && (TripInfoList[i + 1].StartFuel < TripInfoList[i].EndFuel))
-                        fuelUsed += TripInfoList[i].EndFuel - TripInfoList[i + 1].StartFuel;
                 }
             }
-            // as long as there is at least 1 leg, capture the fuel used from the end of the last leg until the
-            // end of the day and it to the fuel used that has been accumulated then store it back into the 
-            // Day Information.
-            if (TripInfoList.Count > 1)
-                TripInfoList[0].FuelUsed = fuelUsed + 
-                    (TripInfoList[TripInfoList.Count - 1].EndFuel - TripInfoList[0].EndFuel);
 
             InsertRowIntoTable(table, VehicleInfo.Name, "Focus", ExcelInsertType.DayEnd, TripInfoList[0]);
 
@@ -216,7 +194,7 @@ namespace BLEConsole
 
         // DateTime	Vehicle	Tow	Type	Description	gallons	Price	Odometer	Engine Hrs Counter	Fuel Level	Leg Duration	Day Duration	Distance Traveled	Engine Hrs Used	Fuel Used
 
-        static TimeSpan legDurationSum { get; set; } = new TimeSpan(0);
+        static TimeSpan LegDurationSum { get; set; } = new TimeSpan(0);
 
         static void InsertRowIntoTable(ListObject table,
             string vehicle, string towVehicle,
@@ -234,7 +212,7 @@ namespace BLEConsole
             {
                 case ExcelInsertType.DayStart:
                     newRow.Range[1, 4].Value = "Start";
-                    legDurationSum = new TimeSpan(0);
+                    LegDurationSum = new TimeSpan(0);
                     break;
                 case ExcelInsertType.DayEnd:
                     newRow.Range[1, 4].Value = "End";
@@ -267,11 +245,11 @@ namespace BLEConsole
                     if (insertType == ExcelInsertType.LegEnd)
                     {
                         newRow.Range[1,11].Value = legDuration.TotalSeconds / 86400; // Excel stores time as a fraction of a day
-                        legDurationSum += legDuration;
+                        LegDurationSum += legDuration;
                     }
                     else
                     {
-                        newRow.Range[1,11].Value = legDurationSum.TotalSeconds / 86400; // Excel stores time as a fraction of a day
+                        newRow.Range[1,11].Value = LegDurationSum.TotalSeconds / 86400; // Excel stores time as a fraction of a day
                         newRow.Range[1,12].Value = legDuration.TotalSeconds / 86400; // Excel stores time as a fraction of a day
                     }
                     newRow.Range[1,13].Value = trip.EndOdometer - trip.StartOdometer;
@@ -449,11 +427,13 @@ namespace BLEConsole
         public string Type { get; set; }
         public uint Id { get; set; }
         public uint StartTime { get; set; }
+        public int StartTimeTZOffset { get; set; }
         public DateTime StartTimeGMT { get { return new DateTime(1970, 1, 1).AddSeconds(StartTime); } }
-        public DateTime StartLocalTime { get { return StartTimeGMT.ToLocalTime(); } }
+        public DateTime StartLocalTime { get { return StartTimeGMT.AddHours(StartTimeTZOffset); } }
         public DateTime EndTimeGMT { get {  return new DateTime(1970, 1, 1).AddSeconds(EndTime); } }
-        public DateTime EndLocalTime { get { return EndTimeGMT.ToLocalTime(); } }
+        public DateTime EndLocalTime { get { return EndTimeGMT.AddHours(EndTimeTZOffset); } }
         public uint EndTime { get; set; }
+        public int EndTimeTZOffset { get; set; }
         public double StartOdometer { get; set; }
         public double EndOdometer { get; set; }
         public double StartEngineHours { get; set; }
@@ -471,13 +451,17 @@ namespace BLEConsole
                 Id = reader.ReadUInt32();
                 StartTime = reader.ReadUInt32();
                 EndTime = reader.ReadUInt32();
+
+                StartTimeTZOffset = reader.ReadInt32();
+                EndTimeTZOffset = reader.ReadInt32();
+
                 StartOdometer = reader.ReadDouble();
                 EndOdometer = reader.ReadDouble();
                 StartEngineHours = reader.ReadDouble();
                 EndEngineHours = reader.ReadDouble();
                 StartFuel = reader.ReadDouble();
                 EndFuel = reader.ReadDouble();
-                FuelUsed = StartFuel - EndFuel;
+                FuelUsed = reader.ReadDouble();
             }
         }
 
@@ -491,14 +475,15 @@ namespace BLEConsole
             //DateTime endPDT = end.AddHours(PDToffset);
             //DateTime endLocal = end.ToLocalTime();
 
-            Console.WriteLine($"\tStart Time: {StartTime} ({StartLocalTime})");
-            Console.WriteLine($"\tEnd Time: {EndTime} ({EndLocalTime})");
+            Console.WriteLine($"\tStart Time: {StartTime} ({StartLocalTime}) GMT{StartTimeTZOffset}");
+            Console.WriteLine($"\tEnd Time: {EndTime} ({EndLocalTime}) GMT{EndTimeTZOffset}");
             Console.WriteLine($"\tStart Odometer: {StartOdometer:F1}");
             Console.WriteLine($"\tEnd Odometer: {EndOdometer:F1}");
             Console.WriteLine($"\tStart Engine Hours: {StartEngineHours:F1}");
             Console.WriteLine($"\tEnd Engine Hours: {EndEngineHours:F1}");
             Console.WriteLine($"\tStart Fuel: {StartFuel:F1}");
             Console.WriteLine($"\tEnd Fuel: {EndFuel:F1}");
+            Console.WriteLine($"\tFuel Used: {FuelUsed:F1}");
         }
     }
 
