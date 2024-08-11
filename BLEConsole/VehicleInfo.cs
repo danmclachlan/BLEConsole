@@ -19,6 +19,10 @@ namespace BLEConsole
         public double FuelFillUpMileage { get; set; }
         public double OilChangeInterval { get; set; }
         public double OilChangeMileage { get; set; }
+        public bool IsAbleToTow {  get; set; }
+        public string TowVehicle {  get; set; }
+        public bool HasGenerator { get; set; }
+        public double GeneratorHours { get; set; }
 
         public VehicleInfo(byte[] data)
         {
@@ -35,6 +39,12 @@ namespace BLEConsole
                 this.FuelFillUpMileage = reader.ReadDouble();
                 this.OilChangeInterval = reader.ReadDouble();
                 this.OilChangeMileage = reader.ReadDouble();
+                this.IsAbleToTow = reader.ReadByte() == 0x1;
+                if (this.IsAbleToTow)
+                    this.TowVehicle = new string(reader.ReadChars(10));
+                this.HasGenerator = reader.ReadByte() == 0x1;
+                if (this.HasGenerator)
+                    this.GeneratorHours = reader.ReadDouble();
             }
         }
 
@@ -50,6 +60,10 @@ namespace BLEConsole
             Console.Write($"\tFuel Fillup Mileage: {FuelFillUpMileage:F1}\n");
             Console.Write($"\tOil Change Interval: {OilChangeInterval:F1}\n");
             Console.Write($"\tOil Change Mileage: {OilChangeMileage:F1}\n");
+            if ( IsAbleToTow ) 
+                Console.Write($"\tTow Vehicle: {TowVehicle}\n");
+            if (HasGenerator)
+                Console.Write($"\tGenerator Hours: {GeneratorHours}\n");
         }
     }
 }

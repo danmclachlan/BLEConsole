@@ -23,6 +23,8 @@ namespace BLEConsole
         public double EndOdometer { get; set; }
         public double StartEngineHours { get; set; }
         public double EndEngineHours { get; set; }
+        public double StartGenHrs { get; set; }
+        public double EndGenHrs { get; set; }
         public double StartFuel { get; set; }
         public double EndFuel { get; set; }
         public double FuelUsed { get; set; }
@@ -33,9 +35,9 @@ namespace BLEConsole
         public double EndLatitude { get; set; }
         public double EndLongitude { get; set; }
         public uint TravelDurationSecs { get; set; }
-
-
-
+        public bool IsTowing { get; set; }
+        public double TowingDistance { get; set; }
+        
         public TripInfo(byte[] data)
         {
             using (MemoryStream stream = new MemoryStream(data))
@@ -60,6 +62,8 @@ namespace BLEConsole
                 EndOdometer = reader.ReadDouble();
                 StartEngineHours = reader.ReadDouble();
                 EndEngineHours = reader.ReadDouble();
+                StartGenHrs = reader.ReadDouble();
+                EndGenHrs = reader.ReadDouble();
                 StartFuel = reader.ReadDouble();
                 EndFuel = reader.ReadDouble();
                 FuelUsed = reader.ReadDouble();
@@ -68,6 +72,8 @@ namespace BLEConsole
                 EndLatitude = reader.ReadDouble();
                 EndLongitude = reader.ReadDouble();
                 TravelDurationSecs = reader.ReadUInt32();
+                IsTowing = reader.ReadByte() == 0x1;
+                TowingDistance = reader.ReadDouble();
             }
         }
 
@@ -79,6 +85,8 @@ namespace BLEConsole
             Console.WriteLine($"\tEnd Odometer: {EndOdometer:F1}");
             Console.WriteLine($"\tStart Engine Hours: {StartEngineHours:F1}");
             Console.WriteLine($"\tEnd Engine Hours: {EndEngineHours:F1}");
+            Console.WriteLine($"\tStart Generator Hours: {StartGenHrs}");
+            Console.WriteLine($"\tEnd Generator Hours: {EndGenHrs}");
             Console.WriteLine($"\tStart Fuel: {StartFuel:F1}");
             Console.WriteLine($"\tEnd Fuel: {EndFuel:F1}");
             Console.WriteLine($"\tFuel Used: {FuelUsed:F1}");
@@ -88,6 +96,8 @@ namespace BLEConsole
             if (EndGPSFixValid) Console.WriteLine($"({EndLatitude:F7}, {EndLongitude:F7})"); else Console.WriteLine();
             double durationHrs = TravelDurationSecs / 3600.0;
             Console.WriteLine($"\tTravel Duration: {TravelDurationSecs} secs ({durationHrs:F3} hrs)");
+            Console.WriteLine($"\tIs Towing: {IsTowing}");
+            Console.WriteLine($"\tTowing Distance: {TowingDistance}");
         }
     }
 }

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Windows.Devices.Bluetooth.Advertisement;
 
 namespace BLEConsole
 {
@@ -24,6 +25,7 @@ namespace BLEConsole
         public int TimeTZOffset { get; set; }
         public double Odometer { get; set; }
         public double EngineHours { get; set; }
+        public double GenHrs {  get; set; }
         public double FuelLevel { get; set; }
         public DateTime TimeGMT { get { return new DateTime(1970, 1, 1).AddSeconds(Time); } }
         public DateTime LocalTime { get { return TimeGMT.AddHours(TimeTZOffset); } }
@@ -36,6 +38,7 @@ namespace BLEConsole
             Console.WriteLine($"\tTime: {Time} ({LocalTime}) GMT{TimeTZOffset}");
             Console.WriteLine($"\tOdometer: {Odometer:F1}");
             Console.WriteLine($"\tEngine Hours: {EngineHours:F1}");
+            Console.WriteLine($"\tGen Hrs: {GenHrs:F1}");
             Console.WriteLine($"\tFuelLevel: {FuelLevel:F1}");
             Console.Write($"\tGPS {GPSFixValid} ");
             if (GPSFixValid) Console.WriteLine($"({Latitude:F7}, {Longitude:F7})"); else Console.WriteLine();
@@ -64,6 +67,7 @@ namespace BLEConsole
                 this.TimeTZOffset = reader.ReadInt32();
                 this.Odometer = reader.ReadDouble();
                 this.EngineHours = reader.ReadDouble();
+                this.GenHrs = reader.ReadDouble();
                 this.FuelLevel = reader.ReadDouble();
                 this.Latitude = reader.ReadDouble();
                 this.Longitude = reader.ReadDouble();
@@ -106,6 +110,7 @@ namespace BLEConsole
                 this.TimeTZOffset = reader.ReadInt32();
                 this.Odometer = reader.ReadDouble();
                 this.EngineHours = reader.ReadDouble();
+                this.GenHrs = reader.ReadDouble();
                 this.FuelLevel = reader.ReadDouble();
                 this.Latitude = reader.ReadDouble();
                 this.Longitude = reader.ReadDouble();
@@ -142,6 +147,7 @@ namespace BLEConsole
                 this.TimeTZOffset = reader.ReadInt32();
                 this.Odometer = reader.ReadDouble();
                 this.EngineHours = reader.ReadDouble();
+                this.GenHrs = reader.ReadDouble();
                 this.FuelLevel = reader.ReadDouble();
                 this.Latitude = reader.ReadDouble();
                 this.Longitude = reader.ReadDouble();

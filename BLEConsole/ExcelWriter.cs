@@ -16,9 +16,6 @@ namespace BLEConsole
         internal Worksheet ConfigSheet { get; set; }
         internal ListObject TripDetailTable { get; set; }
         internal int TripId { get; set; }
-        
-        // Need to sum the distances of each leg if there is a tow vehicle.
-        internal double TowDistSum { get; set; } = 0;
 
         internal enum ExcelInsertType { DayStart, LegStart, LegEnd, DayEnd };
 
@@ -88,18 +85,18 @@ namespace BLEConsole
                     InsertEventRowIntoTable(eventInfo[j++]);
 
                 if (i == 0)
-                    InsertTripRowIntoTable(vehicle.Name, "Focus", ExcelInsertType.DayStart, tripInfo[i]);
+                    InsertTripRowIntoTable(vehicle, ExcelInsertType.DayStart, tripInfo[i]);
                 else
                 {
-                    InsertTripRowIntoTable(vehicle.Name, "Focus", ExcelInsertType.LegStart, tripInfo[i]);
-                    InsertTripRowIntoTable(vehicle.Name, "Focus", ExcelInsertType.LegEnd, tripInfo[i]);
+                    InsertTripRowIntoTable(vehicle, ExcelInsertType.LegStart, tripInfo[i]);
+                    InsertTripRowIntoTable(vehicle, ExcelInsertType.LegEnd, tripInfo[i]);
                 }
             }
             // Find any remaining event that occurred after the end of the last leg
             while (j < eventInfo.Count)
                 InsertEventRowIntoTable(eventInfo[j++]);
 
-            InsertTripRowIntoTable(vehicle.Name, "Focus", ExcelInsertType.DayEnd, tripInfo[0]);
+            InsertTripRowIntoTable(vehicle, ExcelInsertType.DayEnd, tripInfo[0]);
 
             // Reenable automatic calculations once the data has been added
             ExcelApp.Calculation = Excel.XlCalculation.xlCalculationAutomatic;
@@ -111,21 +108,20 @@ namespace BLEConsole
             CurrentWB?.Save();
         }
 
-        internal void InsertTripRowIntoTable(string vehicle, string towVehicle,
+        internal void InsertTripRowIntoTable(VehicleInfo vehicle,
             ExcelInsertType insertType, TripInfo trip)
         {
             ListRow newRow = TripDetailTable.ListRows.Add();
             SetFormatOnColumns(newRow);
 
             newRow.Range[1, ExcelRow.TripId] = TripId;
-            if (vehicle != null) newRow.Range[1, ExcelRow.Vehicle].Value = vehicle;
-            if (towVehicle != null) newRow.Range[1, ExcelRow.TowVehicle].Value = towVehicle;
+            if (vehicle.Name != null) newRow.Range[1, ExcelRow.Vehicle].Value = vehicle.Name;
+            if (vehicle.IsAbleToTow && trip.IsTowing) newRow.Range[1, ExcelRow.TowVehicle].Value = vehicle.TowVehicle;
 
             switch (insertType)
             {
                 case ExcelInsertType.DayStart:
                     newRow.Range[1, ExcelRow.Type].Value = "S";
-                    TowDistSum = 0;
                     break;
 
                 case ExcelInsertType.DayEnd:
@@ -156,6 +152,9 @@ namespace BLEConsole
                     newRow.Range[1, ExcelRow.Odometer].Value = trip.StartOdometer;
                     newRow.Range[1, ExcelRow.EngineHoursCounter].Value = trip.StartEngineHours;
                     newRow.Range[1, ExcelRow.FuelLevel].Value = trip.StartFuel;
+
+                    if (vehicle.HasGenerator)
+                        newRow.Range[1, ExcelRow.GenHrs].Value = trip.StartGenHrs;
                     break;
 
                 case ExcelInsertType.DayEnd:
@@ -175,10 +174,16 @@ namespace BLEConsole
                     newRow.Range[1, ExcelRow.EngineHoursCounter].Value = trip.EndEngineHours;
                     newRow.Range[1, ExcelRow.FuelLevel].Value = trip.EndFuel;
 
+                    if (vehicle.HasGenerator)
+                        newRow.Range[1, ExcelRow.GenHrs].Value = trip.EndGenHrs;
+
                     newRow.Range[1, ExcelRow.EngineHrsUsed].Value = trip.EndEngineHours - trip.StartEngineHours;
                     newRow.Range[1, ExcelRow.FuelUsed].Value = trip.FuelUsed;
                     if (trip.FuelUsed > 0)
                         newRow.Range[1, ExcelRow.MPG].Value = distTraveled / trip.FuelUsed;
+
+                    if (vehicle.IsAbleToTow && vehicle.TowVehicle != null)
+                        newRow.Range[1, ExcelRow.TowedMilesPerDay].Value = trip.TowingDistance;
 
                     if (insertType == ExcelInsertType.LegEnd)
                     {
@@ -189,14 +194,6 @@ namespace BLEConsole
                         newRow.Range[1, ExcelRow.DistPerLeg].Value = distTraveled;
                         if (legDuration.TotalSeconds > 0)
                             newRow.Range[1, ExcelRow.AvgMPH].Value = distTraveled / legDuration.TotalHours;
-
-
-                        // Do appropriate accumulations for the Day
-                        if (towVehicle != null)
-                        {
-                            TowDistSum += distTraveled;
-                            newRow.Range[1, ExcelRow.TowedMilesPerDay].Value = distTraveled;
-                        }
                     }
                     else
                     {
@@ -207,8 +204,6 @@ namespace BLEConsole
                         newRow.Range[1, ExcelRow.ElapsedTimePerDay].Value = legDuration.TotalSeconds / 86400; // Excel stores time as a fraction of a day
                         newRow.Range[1, ExcelRow.TotalDistPerDay].Value = distTraveled;
                         newRow.Range[1, ExcelRow.TimeTravelingPerDay].Value = (double)(trip.TravelDurationSecs) / 86400; // Excel stores time as a fraction of a day
-                        if (towVehicle != null)
-                            newRow.Range[1, ExcelRow.TowedMilesPerDay].Value = TowDistSum;
                     }
                     break;
             }
@@ -233,6 +228,7 @@ namespace BLEConsole
 
             newRow.Range[1, ExcelRow.Odometer].Value = e.Odometer;
             newRow.Range[1, ExcelRow.EngineHoursCounter].Value = e.EngineHours;
+            newRow.Range[1, ExcelRow.GenHrs].Value = e.GenHrs;
             newRow.Range[1, ExcelRow.FuelLevel].Value = e.FuelLevel;
 
             switch (e.Type)
