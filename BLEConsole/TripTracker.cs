@@ -38,6 +38,9 @@ namespace BLEConsole
         public static async Task<int> Initialize(string deviceName)
         {
             int result = 0;
+            TripInfoList = new List<TripInfo>();
+            EventInfoList = new List<EventInfo>();
+
             try
             {
                 result += await Program.OpenDevice(deviceName);
@@ -159,33 +162,6 @@ namespace BLEConsole
 
         public static void ProcessTripData()
         {
-            // Print out on the console all the trip data collected from the TripTracker
-            // system.
-            Console.WriteLine("Vehicle Info");
-            VehicleInfo.Print();
-
-            for (int i = 0; i < TripInfoList.Count; i++)
-            {
-                if (i == 0)
-                    Console.WriteLine($"Day Info");
-                else
-                    Console.WriteLine($"Trip Leg {i} Info");
-
-                TripInfoList[i].Print();
-            }
-
-            for (int i = 0; i < EventInfoList.Count; i++)
-            {
-                if (EventInfoList[i] is PurchaseFuelInfo purchaseFuel)
-                    purchaseFuel.Print();
-                else if (EventInfoList[i] is PurchasePropaneInfo purchasePropane)
-                    purchasePropane.Print();
-                else if (EventInfoList[i] is ChangeOilInfo changeOil)
-                    changeOil.Print();
-                else
-                    EventInfoList[i].Print();
-            }
-
             // Store all the Trip Tracker data for the day into an existing
             // Excel spreadsheet
             // TODO: make the spreadsheet be setable rather than a constant.
@@ -285,11 +261,22 @@ namespace BLEConsole
                     if (_aggregateDataType == AggregateDataType.VehicleInfo)
                     {
                         VehicleInfo = new VehicleInfo(_aggregateDataArray);
+                        Console.WriteLine("Vehicle Info");
+                        VehicleInfo.Print();
                     }
                     else if (_aggregateDataType == AggregateDataType.TripInfo)
                     {
                         var info = new TripInfo(_aggregateDataArray);
                         TripInfoList.Add(info);
+                        if (info.Id == 0)
+                        {
+                            Console.WriteLine($"Day Info");
+                        } 
+                        else
+                        {
+                            Console.WriteLine($"Trip Leg {info.Id} Info");
+                        }
+                        info.Print();
 
                         // we have all the requested data 
                         // day summary is first, and then NumLegs 
@@ -308,16 +295,19 @@ namespace BLEConsole
                             case EventInfo.EventType.FuelPurchase:
                                 var fp = new PurchaseFuelInfo(_aggregateDataArray);
                                 EventInfoList.Add(fp);
+                                fp.Print();
                                 break;
 
                             case EventInfo.EventType.PropanePurchase:
                                 var pp = new PurchasePropaneInfo(_aggregateDataArray);
                                 EventInfoList.Add(pp);
+                                pp.Print();
                                 break;
 
                             case EventInfo.EventType.OilChange:
                                 var oc = new ChangeOilInfo(_aggregateDataArray);
                                 EventInfoList.Add(oc);
+                                oc.Print();
                                 break;
 
                             default:

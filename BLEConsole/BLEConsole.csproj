@@ -99,6 +99,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Event2Info.cs" />
     <Compile Include="EventInfo.cs" />
     <Compile Include="ExcelWriter.cs" />
     <Compile Include="Helpers.cs" />
@@ -106,6 +107,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TripInfo.cs" />
     <Compile Include="TripTracker.cs" />
+    <Compile Include="TripTrackerSync.cs" />
     <Compile Include="VehicleInfo.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -45,6 +45,8 @@ namespace BLEConsole
             CurrentWB?.Close(true);
             ExcelApp.Quit();
             if (CurrentWB != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(CurrentWB);
+            if (ConfigSheet != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(ConfigSheet);
+            if (TripDetailTable != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(TripDetailTable);
             System.Runtime.InteropServices.Marshal.ReleaseComObject(ExcelApp);
         }
 
@@ -106,6 +108,50 @@ namespace BLEConsole
                 SetSheetProtection((Worksheet)TripDetailTable.Parent, true);
             }
             CurrentWB?.Save();
+        }
+
+        public bool AppendToTripDetailTable(List<Event2Info> eventInfo)
+        {
+            if (TripDetailTable == null)
+            {
+                Console.WriteLine($"Error: TripDetailTable not defined");
+                return false;
+            }
+
+            bool locked = IsListObjectProtected(TripDetailTable);
+
+            if (locked)
+            {
+                SetSheetProtection((Worksheet)TripDetailTable.Parent, false);
+            }
+
+            // Turn off calculations while adding the data to sped up the process.
+            ExcelApp.Calculation = Excel.XlCalculation.xlCalculationManual;
+
+            for (int i = 0; i < eventInfo.Count; i++)
+            {
+                InsertEventRowIntoTable(eventInfo[i]);
+            }
+
+            // Reenable automatic calculations once the data has been added
+            ExcelApp.Calculation = Excel.XlCalculation.xlCalculationAutomatic;
+
+            if (locked)
+            {
+                SetSheetProtection((Worksheet)TripDetailTable.Parent, true);
+            }
+
+            bool SaveOk = true;
+            try
+            {
+                CurrentWB?.Save();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An error occurred trying to save the workbook: {ex.Message}");
+                SaveOk = false;
+            }
+            return SaveOk;
         }
 
         internal void InsertTripRowIntoTable(VehicleInfo vehicle,
@@ -207,6 +253,7 @@ namespace BLEConsole
                     }
                     break;
             }
+            System.Runtime.InteropServices.Marshal.ReleaseComObject(newRow);
         }
 
         internal void InsertEventRowIntoTable(EventInfo e)
@@ -270,6 +317,108 @@ namespace BLEConsole
                     }
                     break;
             }
+            System.Runtime.InteropServices.Marshal.ReleaseComObject(newRow);
+        }
+
+        internal void InsertEventRowIntoTable(Event2Info e)
+        {
+            ListRow newRow = TripDetailTable.ListRows.Add();
+            SetFormatOnColumns(newRow);
+
+            newRow.Range[1, ExcelRow.TripId] = TripId;
+            newRow.Range[1, ExcelRow.LocalDate].Value = e.DateTimeLocal.ToShortDateString();
+            newRow.Range[1, ExcelRow.LocalTime].Value = e.DateTimeLocal.ToLongTimeString();
+            newRow.Range[1, ExcelRow.TimezoneOffset] = e.TZOffset;
+            newRow.Range[1, ExcelRow.TimeGMT].Value = e.DateTimeGMT;
+
+            if (e.VehicleName != null)
+                newRow.Range[1, ExcelRow.Vehicle].Value = e.VehicleName;
+            if (e.IsTowing && e.TowVehicle != null)
+                newRow.Range[1, ExcelRow.TowVehicle].Value = e.TowVehicle;
+            if (e.GPSFixValid)
+                InsertGPSDataHyperLink(newRow, e.Latitude, e.Longitude);
+            if (e.Description != null)
+                newRow.Range[1, ExcelRow.Description].Value = e.Description;
+
+            newRow.Range[1, ExcelRow.Odometer].Value = e.Odometer;
+            newRow.Range[1, ExcelRow.EngineHoursCounter].Value = e.EngineHours;
+            newRow.Range[1, ExcelRow.FuelLevel].Value = e.FuelLevel;
+            newRow.Range[1, ExcelRow.GenHrs].Value = e.GenHrsCounter;
+
+            if (e is StartDayInfo)
+            {
+                newRow.Range[1, ExcelRow.Type].Value = "S";
+            }
+            else if (e is StartLegInfo)
+            {
+                newRow.Range[1, ExcelRow.Type].Value = "D";
+            }
+            else if (e is EndDayInfo endDay)
+            {
+                newRow.Range[1, ExcelRow.Type].Value = "E";
+                newRow.Range[1, ExcelRow.EngineHrsUsed].Value = endDay.EngineHoursUsed;
+                newRow.Range[1, ExcelRow.FuelUsed].Value = endDay.FuelUsed;
+                newRow.Range[1, ExcelRow.TowedMilesPerDay].Value = endDay.TowingDistance;
+
+                if (endDay.FuelUsed > 0)
+                    newRow.Range[1, ExcelRow.MPG].Value = endDay.Distance / endDay.FuelUsed;
+
+                // End of the Day 
+                // Duration ==> ElapsedTimePerDay
+                // Distance ==> TotalDistPerDay
+                // TravelDuration ==> TimeTravelingPerDay
+                newRow.Range[1, ExcelRow.ElapsedTimePerDay].Value = endDay.Duration.TotalSeconds / 86400; // Excel stores time as a fraction of a day
+                newRow.Range[1, ExcelRow.TotalDistPerDay].Value = endDay.Distance;
+                newRow.Range[1, ExcelRow.TimeTravelingPerDay].Value = endDay.TravelDuration.TotalSeconds / 86400; // Excel stores time as a fraction of a day
+            }
+            else if (e is EndLegInfo endLeg)
+            {
+                newRow.Range[1, ExcelRow.Type].Value = "A";
+                newRow.Range[1, ExcelRow.EngineHrsUsed].Value = endLeg.EngineHoursUsed;
+                newRow.Range[1, ExcelRow.FuelUsed].Value = endLeg.FuelUsed;
+                newRow.Range[1, ExcelRow.TowedMilesPerDay].Value = endLeg.TowingDistance;
+
+                if (endLeg.FuelUsed > 0)
+                    newRow.Range[1, ExcelRow.MPG].Value = endLeg.Distance / endLeg.FuelUsed;
+
+                // End of Leg
+                // Duration ==> TimePerLeg
+                // Distance ==> DistPerLeg
+                newRow.Range[1, ExcelRow.TimePerLeg].Value = endLeg.Duration.TotalSeconds / 86400; // Excel stores time as a fraction of a day
+                newRow.Range[1, ExcelRow.DistPerLeg].Value = endLeg.Distance;
+
+                if (endLeg.Duration.TotalSeconds > 0)
+                    newRow.Range[1, ExcelRow.AvgMPH].Value = endLeg.Distance / endLeg.Duration.TotalHours;
+            }
+            else if (e is GasInfo gasInfo)
+            {
+                if (e.VehicleName == "F09")
+                {
+                    newRow.Range[1, ExcelRow.Cash].Value = "C";
+                }
+                else
+                {
+                    newRow.Range[1, ExcelRow.Cash].Value = "G";
+                }
+                newRow.Range[1, ExcelRow.Quantity].Value = gasInfo.Quantity;
+                newRow.Range[1, ExcelRow.Cost].Value = gasInfo.Cost;
+                newRow.Range[1, ExcelRow.DistPerLeg].Value = gasInfo.Distance;
+                if (gasInfo.Quantity != 0)
+                    newRow.Range[1, ExcelRow.MPG].Value = gasInfo.Distance / gasInfo.Quantity;
+            }
+            else if (e is PropaneInfo propaneInfo)
+            {
+                newRow.Range[1, ExcelRow.Cash].Value = "P";
+                newRow.Range[1, ExcelRow.Quantity].Value = propaneInfo.Quantity;
+                newRow.Range[1, ExcelRow.Cost].Value = propaneInfo.Cost;
+            }
+            else if (e is OilChangeInfo oilChangeInfo)
+            {
+                newRow.Range[1, ExcelRow.Cash].Value = "R";
+                newRow.Range[1, ExcelRow.MaintenanceType] = "Oil";
+                newRow.Range[1, ExcelRow.DistPerLeg].Value = oilChangeInfo.Distance;
+            }
+            System.Runtime.InteropServices.Marshal.ReleaseComObject(newRow);
         }
 
         internal void InsertGPSDataHyperLink(ListRow row, double lat, double lon)
@@ -280,6 +429,8 @@ namespace BLEConsole
             // Get the worksheet from the table
             Worksheet parentWorksheet = (Worksheet)TripDetailTable.Parent;
             parentWorksheet.Hyperlinks.Add(row.Range[1, ExcelRow.GPSLocation], googleMapsUrl, Type.Missing, "Open Google Maps", display);
+
+            System.Runtime.InteropServices.Marshal.ReleaseComObject(parentWorksheet);
         }
 
         public static class ExcelRow
@@ -376,6 +527,9 @@ namespace BLEConsole
                 Worksheet ws = (Worksheet)TripDetailTable.Parent;
                 Range analysisRange = ws.Range[ws.Cells[row.Index+1, ExcelRow.MPG], ws.Cells[row.Index+1, ExcelRow.TowedMilesPerDay]];
                 analysisRange.ClearContents();
+
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(analysisRange);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(ws);
             }
 
             // Format the cells in the added row to ensure they are formatted as expected.

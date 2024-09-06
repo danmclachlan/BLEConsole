@@ -396,12 +396,19 @@ namespace BLEConsole
                     _exitCode += await TripTracker.Initialize(parameters);
                     break;
 
+                case "triptrackersync":
+                case "tts":
+                    _exitCode += await TripTrackerSync.Initialize(parameters);
+                    break;
+
                 case "debug":
                     TripTracker.Debug = true;
+                    TripTrackerSync.Debug = true;
                     break;
 
                 case "nodebug":
                     TripTracker.Debug = false;
+                    TripTrackerSync.Debug = false;
                     break;
 
                 default:
@@ -1359,7 +1366,8 @@ namespace BLEConsole
         /// <param name="args"></param>
         static void Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
         {
-            if (!TripTracker.Characteristic_ValueChanged(sender, args))
+            if (!TripTracker.Characteristic_ValueChanged(sender, args) &&
+                !TripTrackerSync.Characteristic_ValueChanged(sender, args))
             {
                 // Trip tracker did not handle this change
                 var newValue = Utilities.FormatValueMultipleFormattes(args.CharacteristicValue, _receivedDataFormat);
