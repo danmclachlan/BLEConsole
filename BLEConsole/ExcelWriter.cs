@@ -343,7 +343,8 @@ namespace BLEConsole
             newRow.Range[1, ExcelRow.Odometer].Value = e.Odometer;
             newRow.Range[1, ExcelRow.EngineHoursCounter].Value = e.EngineHours;
             newRow.Range[1, ExcelRow.FuelLevel].Value = e.FuelLevel;
-            newRow.Range[1, ExcelRow.GenHrs].Value = e.GenHrsCounter;
+            if (e.HasGenerator)
+                newRow.Range[1, ExcelRow.GenHrs].Value = e.GenHrsCounter;
 
             if (e is StartDayInfo)
             {
@@ -417,6 +418,11 @@ namespace BLEConsole
                 newRow.Range[1, ExcelRow.Cash].Value = "R";
                 newRow.Range[1, ExcelRow.MaintenanceType] = "Oil";
                 newRow.Range[1, ExcelRow.DistPerLeg].Value = oilChangeInfo.Distance;
+            }
+            else if (e is GeneratorOilChangeInfo generatorOilChangeInfo)
+            {
+                newRow.Range[1, ExcelRow.Cash].Value = "R";
+                newRow.Range[1, ExcelRow.MaintenanceType] = "Gen-Oil";
             }
             System.Runtime.InteropServices.Marshal.ReleaseComObject(newRow);
         }

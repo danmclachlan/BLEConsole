@@ -18,7 +18,8 @@ namespace BLEConsole
             EndLeg = 4,
             Gas = 5,
             Propane = 6,
-            OilChange = 7
+            OilChange = 7,
+            GeneratorOilChange = 8
         }
 
         public uint InterfaceVersion { get; set; }
@@ -151,7 +152,7 @@ namespace BLEConsole
             using (BinaryReader reader = new BinaryReader(stream))
             {
                 InitializeCommonData(reader);
-                
+
                 // EndLeg & EndDay Specific Data
                 this.EngineHoursUsed = reader.ReadDouble();
                 this.FuelUsed = reader.ReadDouble();
@@ -195,7 +196,7 @@ namespace BLEConsole
             using (BinaryReader reader = new BinaryReader(stream))
             {
                 InitializeCommonData(reader);
-                
+
                 // EndLeg & EndDay Specific Data
                 this.EngineHoursUsed = reader.ReadDouble();
                 this.FuelUsed = reader.ReadDouble();
@@ -304,6 +305,24 @@ namespace BLEConsole
             Console.WriteLine($"Change Oil {Id}");
             base.Print();
             Console.WriteLine($"\tDistance: {Distance}");
+        }
+    }
+
+    public class GeneratorOilChangeInfo : Event2Info
+    {
+        public GeneratorOilChangeInfo(byte[] data)
+        {
+            using (MemoryStream stream = new MemoryStream(data))
+            using (BinaryReader reader = new BinaryReader(stream))
+            {
+                InitializeCommonData(reader);
+            }
+        }
+        public new void Print()
+        {
+            Console.WriteLine($"Generator Change Oil {Id}");
+            base.Print();
+            Console.WriteLine($"\tHours: {GenHrsCounter}");
         }
     }
 }
