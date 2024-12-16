@@ -102,6 +102,8 @@
     <Compile Include="Event2Info.cs" />
     <Compile Include="EventInfo.cs" />
     <Compile Include="ExcelWriter.cs" />
+    <Compile Include="FileWriter.cs" />
+    <Compile Include="GPXSync.cs" />
     <Compile Include="Helpers.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

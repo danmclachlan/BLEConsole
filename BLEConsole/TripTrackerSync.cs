@@ -216,10 +216,10 @@ namespace BLEConsole
             CryptographicBuffer.CopyToByteArray(args.CharacteristicValue, out byte[] characteristicValue);
             bool processed;
 
-            if (Debug)
+            /*if (Debug)
             {
                 Console.Write($"\n(tts) Value changed for {sender.Uuid} ({characteristicValue.Length} bytes):\n\thex:\t{BitConverter.ToString(characteristicValue).Replace("-", " ")}\n");
-            }
+            }*/
             do
             {
                 processed = false;

@@ -401,14 +401,26 @@ namespace BLEConsole
                     _exitCode += await TripTrackerSync.Initialize(parameters);
                     break;
 
+                case "gpxsyncinit":
+                case "gsi":
+                    _exitCode += await GPXSync.Initialize(parameters);
+                    break;
+
+                case "gpxsyncfile":
+                case "gsf":
+                    _exitCode = await GPXSync.TransferFile(parameters);
+                    break;
+
                 case "debug":
                     TripTracker.Debug = true;
                     TripTrackerSync.Debug = true;
+                    GPXSync.Debug = true;
                     break;
 
                 case "nodebug":
                     TripTracker.Debug = false;
                     TripTrackerSync.Debug = false;
+                    GPXSync.Debug = false;
                     break;
 
                 default:
@@ -1367,7 +1379,8 @@ namespace BLEConsole
         static void Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
         {
             if (!TripTracker.Characteristic_ValueChanged(sender, args) &&
-                !TripTrackerSync.Characteristic_ValueChanged(sender, args))
+                !TripTrackerSync.Characteristic_ValueChanged(sender, args) &&
+                !GPXSync.Characteristic_ValueChanged(sender, args))
             {
                 // Trip tracker did not handle this change
                 var newValue = Utilities.FormatValueMultipleFormattes(args.CharacteristicValue, _receivedDataFormat);
