@@ -13,34 +13,34 @@ using Windows.Security.Cryptography;
 
 namespace BLEConsole
 {
-    internal static class GPXSync
+    internal class GPXSync : ExtensionBase
     {
-        enum PendingWorkType { None, AckChunk, CloseFile, Done };
-        static PendingWorkType PendingWork { get; set; } = PendingWorkType.None;
+        internal enum PendingWorkType { None, AckChunk, CloseFile, Done };
+        internal enum AggregationType { None, Command, Data };
+        internal enum CommandType { None, GPXRange, GPXData };
 
-        static string _gpxPath = "C:\\Users\\drmcl\\GitHub\\Temp";
-        static string _gpxFilenameTemplate = "Trip{0}.gpx";
-        static bool _haveStartEnd = false;
+        internal PendingWorkType PendingWork { get; set; } = PendingWorkType.None;
 
-        enum AggregationType { None, Command, Data};
-        enum CommandType { None, GPXRange, GPXData };
+        string _gpxPath = "C:\\Users\\drmcl\\GitHub\\Temp";
+        string _gpxFilenameTemplate = "Trip{0}.gpx";
+        bool _haveStartEnd = false;
 
-        static AggregationType _aggregationType = AggregationType.None;
-        static CommandType _commandType = CommandType.None;
+        AggregationType _aggregationType = AggregationType.None;
+        CommandType _commandType = CommandType.None;
 
-        static int _currentChunkNum;
-        static int _totalChunks;
-        static int _bytesInChunkRemaining;
+        int _currentChunkNum;
+        int _totalChunks;
+        int _bytesInChunkRemaining;
  
-        static byte[] _aggregateDataArray = null;
-        static FileWriter _gpxFileWriter = null;
+        byte[] _aggregateDataArray = null;
+        FileWriter _gpxFileWriter = null;
 
-        static int StartId { get; set; } = 0;
-        static int EndId { get; set; } = 0;
+        int StartId { get; set; } = 0;
+        int EndId { get; set; } = 0;
 
-        public static bool Debug { get; set; } = false;
+        public bool Debug { get; set; } = false;
 
-        static (string filename, string parameters) ExtractPath(string parameters)
+        private (string filename, string parameters) ExtractPath(string parameters)
         {
             string pattern = @"P:=""([^""]+)""|F:=([^ ]+)";
             var match = Regex.Match(parameters, pattern);
@@ -55,7 +55,7 @@ namespace BLEConsole
             return (null, parameters);
         }
 
-        public static async Task<int> Initialize(string input)
+        public async Task<int> Initialize(string input)
         {
             var (path, parameters) = ExtractPath(input);
             if (path != null) _gpxPath = path;
@@ -91,7 +91,7 @@ namespace BLEConsole
             return result;
         }
 
-        public static async Task<int> TransferFile (string input)
+        public async Task<int> TransferFile (string input)
         {
             int result = 0;
             if (!string.IsNullOrEmpty(input)) 
@@ -132,7 +132,7 @@ namespace BLEConsole
         /// <summary>
         /// Async method to process work generated in Characteristic_ValueChanged
         /// </summary>
-        public static async Task<int> ProcessPendingWork()
+        private async Task<int> ProcessPendingWork()
         {
             int result = 0;
 
@@ -174,7 +174,7 @@ namespace BLEConsole
         /// Extract GPXRange parameters
         /// </summary>
         /// <param name="data"></param>
-        static private bool CaptureGPXRange(string data)
+        private bool CaptureGPXRange(string data)
         {
             var counts = data.Split(',');
             if (counts.Length == 2)
@@ -193,7 +193,7 @@ namespace BLEConsole
         /// Extract GPXData parameters
         /// </summary>
         /// <param name="data"></param>
-        static private bool CaptureGPXData(string data)
+        private bool CaptureGPXData(string data)
         {
             var counts = data.Split(',');
             if (counts.Length == 3)
@@ -208,12 +208,72 @@ namespace BLEConsole
                 return false; 
         }
 
+        /// <<summary>
+        /// Command processor for extension
+        /// looks for match between incoming command and the commands for the extension
+        /// </summary>
+        /// <param name="cmd"></param>
+        /// <param name="parameters"></param>
+        public override async Task<(bool, int)> ExecuteExtensionAsync(string cmd, string parameters)
+        {
+            bool matched = false;
+            int result = 0;
+
+            switch (cmd)
+            {
+                case "gpxsyncinit":
+                case "gsi":
+                    result = await Initialize(parameters);
+                    matched = true;
+                    break;
+
+                case "gpxsyncfile":
+                case "gsf":
+                    result = await TransferFile(parameters);
+                    matched = true;
+                    break;
+
+                case "gdebug":
+                    Debug = true;
+                    matched = true;
+                    break;
+
+                case "gnodebug":
+                    Debug = false;
+                    matched = true;
+                    break;
+            }
+            return (matched, result);
+        }
+
+        /// <summary>
+        /// Print the help message for the Extension
+        /// </summary>
+        public override void Help()
+        {
+            Console.WriteLine(
+                "\nExtension: GPXSync - transfer GPX files from device\n" +
+                "  gpxsyncinit <name>, <#>,\n" +
+                "  or <address>\n" +
+                "  P:=<path to write GPX files>),\n" +
+                "  gsi\t\t\t\t: connects to device,\n" +
+                "  \t\t\t\t: sets the service to 'SimpleKeyService',\n" +
+                "  \t\t\t\t: subscribes to characteristic #0,\n" +
+                "  \t\t\t\t: and gets the sync range\n" +
+                $" \t\t\t\t: P:= is optional and defaults to '{_gpxPath}\n" +
+                "  gpxsyncfile, gsf <id>" +
+                $"  \t: transfers the <id> gpx file from the device and writes it to {_gpxFilenameTemplate}\n" +
+                "  gdebug\t\t\t: turns on debugging for the extension\n" +
+                "  gnodebug\t\t\t: turns off debugging for the extension"
+                );
+        }
+
         /// <summary>
         /// Event handler for ValueChanged callback
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="args"></param>
-        public static bool Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+        public override bool Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
         {
             CryptographicBuffer.CopyToByteArray(args.CharacteristicValue, out byte[] characteristicValue);
             bool processed;

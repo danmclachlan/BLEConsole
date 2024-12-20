@@ -18,20 +18,20 @@ namespace BLEConsole
             OilChange = 3
         }
 
-        public uint Id { get; set; }
-        public string VehicleName { get; set; }
-        public EventType Type { get; set; }
-        public uint Time { get; set; }
-        public int TimeTZOffset { get; set; }
-        public double Odometer { get; set; }
-        public double EngineHours { get; set; }
-        public double GenHrs {  get; set; }
-        public double FuelLevel { get; set; }
+        public uint Id { get; internal set; }
+        public string VehicleName { get; internal set; }
+        public EventType Type { get; internal set; }
+        public uint Time { get; internal set; }
+        public int TimeTZOffset { get; internal set; }
+        public double Odometer { get; internal set; }
+        public double EngineHours { get; internal set; }
+        public double GenHrs {  get; internal set; }
+        public double FuelLevel { get; internal set; }
         public DateTime TimeGMT { get { return new DateTime(1970, 1, 1).AddSeconds(Time); } }
         public DateTime LocalTime { get { return TimeGMT.AddHours(TimeTZOffset); } }
-        public bool GPSFixValid { get; set; }
-        public double Latitude { get; set; }
-        public double Longitude { get; set; }
+        public bool GPSFixValid { get; internal set; }
+        public double Latitude { get; internal set; }
+        public double Longitude { get; internal set; }
         public void Print()
         {
             Console.WriteLine($"\tVehicleName: {VehicleName}");
@@ -47,9 +47,9 @@ namespace BLEConsole
 
     public class PurchaseFuelInfo : EventInfo
     {
-        public double Quantity { get; set; }
-        public double Cost { get; set; }
-        public double Distance { get; set; }
+        public double Quantity { get; internal set; }
+        public double Cost { get; internal set; }
+        public double Distance { get; internal set; }
 
         public PurchaseFuelInfo(byte[] data)
         {
@@ -91,8 +91,8 @@ namespace BLEConsole
 
     public class PurchasePropaneInfo : EventInfo
     {
-        public double Quantity { get; set; }
-        public double Cost { get; set; }
+        public double Quantity { get; internal set; }
+        public double Cost { get; internal set; }
 
         public PurchasePropaneInfo(byte[] data)
         {
@@ -130,7 +130,7 @@ namespace BLEConsole
 
     public class ChangeOilInfo : EventInfo
     {
-        public double Distance { get; set; }
+        public double Distance { get; internal set; }
         public ChangeOilInfo(byte[] data)
         {
             using (MemoryStream stream = new MemoryStream(data))

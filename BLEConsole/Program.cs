@@ -15,6 +15,7 @@ using System.Text;
 using System.Security.Cryptography;
 using Windows.Security.Cryptography;
 using Windows.Storage.Streams;
+using System.Diagnostics;
 
 namespace BLEConsole
 {
@@ -47,6 +48,9 @@ namespace BLEConsole
 
         static string _versionInfo;
 
+        // List of Extensions 
+        static private List<ExtensionBase> _extensions = new List<ExtensionBase>();
+
         // Variables for "foreach" loop implementation
         static List<string> _forEachCommands = new List<string>();
         static List<string> _forEachDeviceNames = new List<string>();
@@ -73,6 +77,17 @@ namespace BLEConsole
 
             // Set Ctrl+Break/Ctrl+C handler
             Console.CancelKeyPress += Console_CancelKeyPress;
+
+            // Add extensions
+            // Get all types that are derived from ExtensionBase
+            var derivedTypes = Assembly.GetExecutingAssembly().GetTypes()
+                .Where(t => t.IsSubclassOf(typeof(ExtensionBase)) && !t.IsAbstract);
+            // Instantiate and install each derived type
+            foreach (var type in derivedTypes)
+            {
+                ExtensionBase extension = (ExtensionBase)Activator.CreateInstance(type);
+                _extensions.Add(extension);
+            }
 
             // Run main loop
             MainAsync(args).Wait();
@@ -391,40 +406,20 @@ namespace BLEConsole
                     PairBluetooth(parameters);
                     break;
 
-                case "triptracker":
-                case "tt":
-                    _exitCode += await TripTracker.Initialize(parameters);
-                    break;
-
-                case "triptrackersync":
-                case "tts":
-                    _exitCode += await TripTrackerSync.Initialize(parameters);
-                    break;
-
-                case "gpxsyncinit":
-                case "gsi":
-                    _exitCode += await GPXSync.Initialize(parameters);
-                    break;
-
-                case "gpxsyncfile":
-                case "gsf":
-                    _exitCode = await GPXSync.TransferFile(parameters);
-                    break;
-
-                case "debug":
-                    TripTracker.Debug = true;
-                    TripTrackerSync.Debug = true;
-                    GPXSync.Debug = true;
-                    break;
-
-                case "nodebug":
-                    TripTracker.Debug = false;
-                    TripTrackerSync.Debug = false;
-                    GPXSync.Debug = false;
-                    break;
-
                 default:
-                    Console.WriteLine("Unknown command. Type \"?\" for help.");
+                    int result = 0;
+                    bool matched = false;
+                    foreach (var extension in _extensions)
+                    {
+                        (matched, result) = await extension.ExecuteExtensionAsync(cmd, parameters);
+                        if (matched)
+                        {
+                            _exitCode += result;
+                            break;
+                        }
+                    }
+                    if (!matched)
+                        Console.WriteLine("Unknown command. Type \"?\" for help.");
                     break;
             }
         }
@@ -469,6 +464,10 @@ namespace BLEConsole
                 "  ** <name> could be \"service/characteristic\", or just a char name or # (for selected service)\n\n" +
                 "  For additional information and examples please visit https://github.com/sensboston/BLEConsole \n"
                 );
+            foreach (var extension in _extensions)
+            {
+                extension.Help();
+            }
         }
 
         static int PrintInformation(string param)
@@ -1378,13 +1377,19 @@ namespace BLEConsole
         /// <param name="args"></param>
         static void Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
         {
-            if (!TripTracker.Characteristic_ValueChanged(sender, args) &&
-                !TripTrackerSync.Characteristic_ValueChanged(sender, args) &&
-                !GPXSync.Characteristic_ValueChanged(sender, args))
+            bool processed = false;
+            foreach(var extension in _extensions)
             {
-                // Trip tracker did not handle this change
+                if (extension.Characteristic_ValueChanged(sender, args))
+                {
+                    processed = true;
+                    break;
+                }
+            }
+            if (!processed)
+            {
+                // The extensions did not handle this change
                 var newValue = Utilities.FormatValueMultipleFormattes(args.CharacteristicValue, _receivedDataFormat);
-
 
                 if (Console.IsInputRedirected) Console.Write($"{newValue}");
                 else Console.Write($"Value changed for {sender.Uuid} ({args.CharacteristicValue.Length} bytes):\n{newValue}\nBLE: ");

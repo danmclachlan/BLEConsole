@@ -11,24 +11,24 @@ using Windows.Security.Cryptography;
 
 namespace BLEConsole
 {
-    internal static class TripTrackerSync
+    internal class TripTrackerSync : ExtensionBase
     {
         enum PendingWorkType { None, RequestData, ProcessResults, Done };
-        static PendingWorkType PendingWork { get; set; } = PendingWorkType.None;
+        private PendingWorkType PendingWork { get; set; } = PendingWorkType.None;
 
-        static bool _aggregrateDataInValueChanged = false;
-        static int _aggregrateDataLengthRemaining = 0;
-        static byte[] _aggregateDataArray = null;
-        static uint _lastIdprocessed = 0;
-        static string _excelFilename = "C:\\Users\\drmcl\\GitHub\\Temp\\FR3-RV-Log.xlsm";
+        bool _aggregrateDataInValueChanged = false;
+        int _aggregrateDataLengthRemaining = 0;
+        byte[] _aggregateDataArray = null;
+        uint _lastIdprocessed = 0;
+        string _excelFilename = "C:\\Users\\drmcl\\GitHub\\Temp\\FR3-RV-Log.xlsm";
 
-        static int StartId { get; set; } = 0;
-        static int EndId { get; set; } = 0;
+        public int StartId { get; private set; } = 0;
+        public int EndId { get; private set; } = 0;
 
-        public static bool Debug { get; set; } = false;
-        public static List<Event2Info> EventInfoList { get; set; } = new List<Event2Info>();
+        public bool Debug { get; set; } = false;
+        public List<Event2Info> EventInfoList { get; private set; } = new List<Event2Info>();
 
-        static (string filename, string parameters) ExtractFilename(string parameters)
+        private (string filename, string parameters) ExtractFilename(string parameters)
         {
             string pattern = @"F:=""([^""]+)""|F:=([^ ]+)";
             var match = Regex.Match(parameters, pattern);
@@ -43,7 +43,7 @@ namespace BLEConsole
             return (null, parameters);
         }
 
-        static bool IsFileWriteable(string path)
+        private bool IsFileWriteable(string path)
         {
             try
             {
@@ -59,7 +59,7 @@ namespace BLEConsole
             }
         }
 
-        public static async Task<int> Initialize(string input)
+        public async Task<int> Initialize(string input)
         {
             var (filename, parameters) = ExtractFilename(input);
             if (filename != null)
@@ -112,8 +112,10 @@ namespace BLEConsole
             return result;
         }
 
-
-        public static async Task ProcessPendingWork()
+        /// <summary>
+        /// Async method to process work generated in Characteristic_ValueChanged
+        /// </summary>
+        private async Task ProcessPendingWork()
         {
             while (PendingWork != PendingWorkType.Done)
             {
@@ -139,7 +141,10 @@ namespace BLEConsole
             }
         }
 
-        public static async Task RequestEventData()
+        /// <summary>
+        /// Async method to request the Event data in the Sync range
+        /// </summary>
+        private async Task RequestEventData()
         {
             int result = 0;
 
@@ -168,7 +173,10 @@ namespace BLEConsole
             }
         }
 
-        public static async Task ProcessEventData()
+        /// <summary>
+        /// Async method to process the event data and write it to an excel file
+        /// </summary>
+        private async Task ProcessEventData()
         {
             int result = 0;
 
@@ -206,12 +214,67 @@ namespace BLEConsole
             }
         }
 
+        /// <<summary>
+        /// Command processor for extension
+        /// looks for match between incoming command and the commands for the extension
+        /// </summary>
+        /// <param name="cmd"></param>
+        /// <param name="parameters"></param>
+        public override async Task<(bool, int)> ExecuteExtensionAsync(string cmd, string parameters)
+        {
+            bool matched = false;
+            int result = 0;
+
+            switch (cmd)
+            {
+                case "triptrackersync":
+                case "tts":
+                    result = await Initialize(parameters);
+                    matched = true;
+                    break;
+
+                case "tdebug":
+                    Debug = true;
+                    matched = true;
+                    break;
+
+                case "tnodebug":
+                    Debug = false;
+                    matched = true;
+                    break;
+            }
+            return (matched, result);
+        }
+
+        /// <summary>
+        /// Print the help message for the Extension
+        /// </summary>
+        public override void Help()
+        {
+            Console.WriteLine(
+                "\nExtension: Trip Tracker Sync - transfer events from device and write to an excel file\n" +
+                "  triptrackersync <name>, <#>,\n" +
+                "  or <address>\n" +
+                "  F:=<path to excel file>),\n" +
+                "  tts\t\t\t\t: connects to device,\n" +
+                "  \t\t\t\t: sets the service to 'SimpleKeyService',\n" +
+                "  \t\t\t\t: subscribes to characteristic #0,\n" +
+                "  \t\t\t\t: gets the sync range,\n" +
+                "  \t\t\t\t: transfers the events,\n" +
+                "  \t\t\t\t: writes them to the excel file,\n" +
+                "  \t\t\t\t: and updates the last sync Id on the device\n" +
+                $" \t\t\t\t: F:= is optional and defaults to '{_excelFilename}\n" +
+                "  tdebug\t\t\t: turns on debugging for the extension\n" +
+                "  tnodebug\t\t\t: turns off debugging for the extension"
+                );
+        }
+
         /// <summary>
         /// Event handler for ValueChanged callback
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="args"></param>
-        public static bool Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+        public override bool Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
         {
             CryptographicBuffer.CopyToByteArray(args.CharacteristicValue, out byte[] characteristicValue);
             bool processed;

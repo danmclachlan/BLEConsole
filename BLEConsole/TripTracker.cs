@@ -15,27 +15,28 @@ using Excel = Microsoft.Office.Interop.Excel;
 
 namespace BLEConsole
 {
-    public static class TripTracker
+    internal class TripTracker : ExtensionBase
     {
         enum AggregateDataType { None, VehicleInfo, TripInfo, EventInfo };
         enum PendingWorkType { None, RequestData, ProcessResults, Done };
 
-        static bool _aggregrateDataInValueChanged = false;
-        static int _aggregrateDataLengthRemaining = 0;
-        static byte[] _aggregateDataArray = null;
-        static AggregateDataType _aggregateDataType = AggregateDataType.None;
-        static PendingWorkType PendingWork { get; set; } = PendingWorkType.None;
-        static int NumLegs { get; set; } = 0;
-        static int NumEvents { get; set; } = 0;
+        string _excelFilename = "C:\\Users\\drmcl\\GitHub\\Temp\\FR3-RV-Log.xlsm";
+        bool _aggregrateDataInValueChanged = false;
+        int _aggregrateDataLengthRemaining = 0;
+        byte[] _aggregateDataArray = null;
+        AggregateDataType _aggregateDataType = AggregateDataType.None;
+        private PendingWorkType PendingWork { get; set; } = PendingWorkType.None;
+        int NumLegs { get; set; } = 0;
+        int NumEvents { get; set; } = 0;
 
-        public static bool Debug { get; set; } = false;
+        public bool Debug { get; set; } = false;
 
-        public static List<TripInfo> TripInfoList { get; set; } = new List<TripInfo>();
-        public static VehicleInfo VehicleInfo { get; set; }
-        public static List<EventInfo> EventInfoList { get; set; } = new List<EventInfo>();
+        public List<TripInfo> TripInfoList { get; set; } = new List<TripInfo>();
+        public VehicleInfo VehicleInfo { get; set; }
+        public List<EventInfo> EventInfoList { get; set; } = new List<EventInfo>();
 
 
-        public static async Task<int> Initialize(string deviceName)
+        public async Task<int> Initialize(string deviceName)
         {
             int result = 0;
             TripInfoList = new List<TripInfo>();
@@ -78,7 +79,7 @@ namespace BLEConsole
             return result;
         }
 
-        public static async Task ProcessPendingWork()
+        private async Task ProcessPendingWork()
         {
             while (PendingWork != PendingWorkType.Done)
             {
@@ -104,7 +105,7 @@ namespace BLEConsole
             }
         }
 
-        public static async Task RequestTripData()
+        private async Task RequestTripData()
         {
             int result = 0;
 
@@ -160,19 +161,72 @@ namespace BLEConsole
 
         enum ExcelInsertType { DayStart, LegStart, LegEnd, DayEnd };
 
-        public static void ProcessTripData()
+        private void ProcessTripData()
         {
             // Store all the Trip Tracker data for the day into an existing
             // Excel spreadsheet
             // TODO: make the spreadsheet be setable rather than a constant.
-            var filename = "C:\\Users\\drmcl\\GitHub\\Temp\\FR3-RV-Log.xlsm";
-            Console.Write($"Writing data to Excel: {filename} ... ");
+            Console.Write($"Writing data to Excel: {_excelFilename} ... ");
 
-            ExcelWriter eWriter = new ExcelWriter(filename);
+            ExcelWriter eWriter = new ExcelWriter(_excelFilename);
             eWriter.AppendToTripDetailTable(VehicleInfo, TripInfoList, EventInfoList);
             eWriter.Dispose();
 
             Console.WriteLine("Complete");
+        }
+
+        /// <<summary>
+        /// Command processor for extension
+        /// looks for match between incoming command and the commands for the extension
+        /// </summary>
+        /// <param name="cmd"></param>
+        /// <param name="parameters"></param>
+        public override async Task<(bool, int)> ExecuteExtensionAsync(string cmd, string parameters)
+        {
+            bool matched = false;
+            int result = 0;
+
+            switch (cmd)
+            {
+                case "triptracker":
+                case "tt":
+                    result = await Initialize(parameters);
+                    matched = true;
+                    break;
+
+                case "debug":
+                    Debug = true;
+                    matched = true;
+                    break;
+
+                case "nodebug":
+                    Debug = false;
+                    matched = true;
+                    break;
+            }
+            return (matched, result);
+        }
+
+        /// <summary>
+        /// Print the help message for the Extension
+        /// </summary>
+        public override void Help()
+        {
+            Console.WriteLine(
+                "\nExtension: Trip Tracker - transfer events from device memory (current day only) and write to an excel file\n" +
+                "  triptracker <name>, <#>,\n" +
+                "  or <address>\n" +
+                //"  F:=<path to excel file>),\n" +
+                "  tt\t\t\t\t: connects to device,\n" +
+                "  \t\t\t\t: sets the service to 'SimpleKeyService', \n" +
+                "  \t\t\t\t: subscribes to characteristic #0,\n" +
+                "  \t\t\t\t: gets the sync range,\n" +
+                "  \t\t\t\t: transfers the events,\n" +
+                "  \t\t\t\t: and writes them to the excel file\n" +
+                //$" \t\t\t\t: F:= is optional and defaults to '{_excelFilename}\n" +
+                "  debug\t\t\t\t: turns on debugging for the extension\n" +
+                "  nodebug\t\t\t: turns off debugging for the extension"
+                );
         }
 
         /// <summary>
@@ -180,7 +234,7 @@ namespace BLEConsole
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="args"></param>
-        public static bool Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+        public override bool Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
         {
             var tempValue = Utilities.FormatValue(args.CharacteristicValue, DataFormat.UTF8);
 

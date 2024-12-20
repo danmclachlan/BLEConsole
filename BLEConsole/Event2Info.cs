@@ -22,26 +22,26 @@ namespace BLEConsole
             GeneratorOilChange = 8
         }
 
-        public uint InterfaceVersion { get; set; }
-        public uint Id { get; set; }
-        public EventType Type { get; set; }
-        public uint TimeSeconds { get; set; }
-        public int TZOffset { get; set; }
-        public uint TimeGMTSeconds { get; set; }
+        public uint InterfaceVersion { get; internal set; }
+        public uint Id { get; internal set; }
+        public EventType Type { get; internal set; }
+        public uint TimeSeconds { get; internal set; }
+        public int TZOffset { get; internal set; }
+        public uint TimeGMTSeconds { get; internal set; }
         public DateTime DateTimeLocal { get { return new DateTime(1970, 1, 1).AddSeconds(TimeSeconds); ; } }
         public DateTime DateTimeGMT { get { return new DateTime(1970, 1, 1).AddSeconds(TimeGMTSeconds); } }
-        public string VehicleName { get; set; }
-        public double Odometer { get; set; }
-        public double EngineHours { get; set; }
-        public double FuelLevel { get; set; }
-        public string Description { get; set; }
-        public bool IsTowing { get; set; }
-        public string TowVehicle { get; set; }
-        public bool GPSFixValid { get; set; }
-        public double Latitude { get; set; }
-        public double Longitude { get; set; }
-        public bool HasGenerator { get; set; }
-        public double GenHrsCounter { get; set; }
+        public string VehicleName { get; internal set; }
+        public double Odometer { get; internal set; }
+        public double EngineHours { get; internal set; }
+        public double FuelLevel { get; internal set; }
+        public string Description { get; internal set; }
+        public bool IsTowing { get; internal set; }
+        public string TowVehicle { get; internal set; }
+        public bool GPSFixValid { get; internal set; }
+        public double Latitude { get; internal set; }
+        public double Longitude { get; internal set; }
+        public bool HasGenerator { get; internal set; }
+        public double GenHrsCounter { get; internal set; }
 
         public void Print()
         {
@@ -138,13 +138,13 @@ namespace BLEConsole
 
     public class EndLegInfo : Event2Info
     {
-        public double EngineHoursUsed { get; set; }
-        public double FuelUsed { get; set; }
-        public double TowingDistance { get; set; }
-        public double Distance { get; set; }
-        public uint DurationSeconds { get; set; }
+        public double EngineHoursUsed { get; internal set; }
+        public double FuelUsed { get; internal set; }
+        public double TowingDistance { get; internal set; }
+        public double Distance { get; internal set; }
+        public uint DurationSeconds { get; internal set; }
         public TimeSpan Duration { get { return TimeSpan.FromSeconds(DurationSeconds); } }
-        public double AvgMPH { get; set; }
+        public double AvgMPH { get; internal set; }
 
         public EndLegInfo(byte[] data)
         {
@@ -181,13 +181,13 @@ namespace BLEConsole
 
     public class EndDayInfo : Event2Info
     {
-        public double EngineHoursUsed { get; set; }
-        public double FuelUsed { get; set; }
-        public double TowingDistance { get; set; }
-        public double Distance { get; set; }
-        public uint DurationSeconds { get; set; }
+        public double EngineHoursUsed { get; internal set; }
+        public double FuelUsed { get; internal set; }
+        public double TowingDistance { get; internal set; }
+        public double Distance { get; internal set; }
+        public uint DurationSeconds { get; internal set; }
         public TimeSpan Duration { get { return TimeSpan.FromSeconds(DurationSeconds); } }
-        public uint TravelDurationSeconds { get; set; }
+        public uint TravelDurationSeconds { get; internal set; }
         public TimeSpan TravelDuration { get { return TimeSpan.FromSeconds(TravelDurationSeconds); } }
 
         public EndDayInfo(byte[] data)
@@ -225,9 +225,9 @@ namespace BLEConsole
 
     public class GasInfo : Event2Info
     {
-        public double Quantity { get; set; }
-        public double Cost { get; set; }
-        public double Distance { get; set; }
+        public double Quantity { get; internal set; }
+        public double Cost { get; internal set; }
+        public double Distance { get; internal set; }
 
         public GasInfo(byte[] data)
         {
@@ -258,8 +258,8 @@ namespace BLEConsole
 
     public class PropaneInfo : Event2Info
     {
-        public double Quantity { get; set; }
-        public double Cost { get; set; }
+        public double Quantity { get; internal set; }
+        public double Cost { get; internal set; }
 
         public PropaneInfo(byte[] data)
         {
@@ -286,7 +286,7 @@ namespace BLEConsole
 
     public class OilChangeInfo : Event2Info
     {
-        public double Distance { get; set; }
+        public double Distance { get; internal set; }
 
         public OilChangeInfo(byte[] data)
         {

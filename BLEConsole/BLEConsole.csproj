@@ -102,6 +102,7 @@
     <Compile Include="Event2Info.cs" />
     <Compile Include="EventInfo.cs" />
     <Compile Include="ExcelWriter.cs" />
+    <Compile Include="ExtensionBase.cs" />
     <Compile Include="FileWriter.cs" />
     <Compile Include="GPXSync.cs" />
     <Compile Include="Helpers.cs" />

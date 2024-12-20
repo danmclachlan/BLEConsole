@@ -9,20 +9,20 @@ namespace BLEConsole
 {
     public class VehicleInfo
     {
-        public string Name { get; set; }
-        public double Odometer { get; set; }
-        public double EngineHours { get; set; }
-        public double OdometerBase { get; set; }
-        public double EngineHoursBase { get; set; }
-        public double FuelCapacity { get; set; }
-        public double FuelReserve { get; set; }
-        public double FuelFillUpMileage { get; set; }
-        public double OilChangeInterval { get; set; }
-        public double OilChangeMileage { get; set; }
-        public bool IsAbleToTow {  get; set; }
-        public string TowVehicle {  get; set; }
-        public bool HasGenerator { get; set; }
-        public double GeneratorHours { get; set; }
+        public string Name { get; private set; }
+        public double Odometer { get; private set; }
+        public double EngineHours { get; private set; }
+        public double OdometerBase { get; private set; }
+        public double EngineHoursBase { get; private set; }
+        public double FuelCapacity { get; private set; }
+        public double FuelReserve { get; private set; }
+        public double FuelFillUpMileage { get; private set; }
+        public double OilChangeInterval { get; private set; }
+        public double OilChangeMileage { get; private set; }
+        public bool IsAbleToTow {  get; private set; }
+        public string TowVehicle {  get; private set; }
+        public bool HasGenerator { get; private set; }
+        public double GeneratorHours { get; private set; }
 
         public VehicleInfo(byte[] data)
         {
