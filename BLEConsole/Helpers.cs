@@ -1,15 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Text;
 using System.Linq;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Enumeration;
 using Windows.Security.Cryptography;
 using Windows.Storage.Streams;
-using System.Threading.Tasks;
-using System.Threading;
-using System.Text.RegularExpressions;
 
 namespace BLEConsole
 {
@@ -950,6 +951,53 @@ namespace BLEConsole
                 Console.WriteLine(error.Message);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Break up a buffer with length > chunkSize into pieces and do multiple characteristic writes
+        /// </summary>
+        /// <param name="characteristic"></param>
+        /// <param name="buffer"></param>
+        /// <returns>GattCommunicationStatus</returns>
+        public static async Task<GattCommunicationStatus> WriteCharacteristicAsync(
+            GattCharacteristic characteristic,
+            IBuffer buffer)
+        {
+            // Convert IBuffer → byte[]
+            byte[] fullBytes = buffer.ToArray();
+
+            // Default Windows 10 chunk size
+            int chunkSize = 20;
+
+            // Future-proof for Windows 11
+            var prop = characteristic.GetType().GetProperty("PreferredWriteWithoutResponseSize");
+            if (prop != null)
+            {
+                int preferred = (int)prop.GetValue(characteristic);
+                if (preferred > 0)
+                    chunkSize = preferred;
+            }
+
+            if (fullBytes.Length <= chunkSize)
+            {
+                return (await characteristic.WriteValueWithResultAsync(buffer)).Status;
+            }
+
+            // Otherwise chunk using WriteWithoutResponse
+            for (int i = 0; i < fullBytes.Length; i += chunkSize)
+            {
+                byte[] chunk = fullBytes.Skip(i).Take(chunkSize).ToArray();
+                var chunkBuffer = chunk.AsBuffer();
+
+                var status = await characteristic.WriteValueAsync(
+                    chunkBuffer,
+                    GattWriteOption.WriteWithoutResponse);
+
+                if (status != GattCommunicationStatus.Success)
+                    return status;
+            }
+
+            return GattCommunicationStatus.Success;
         }
 
         /// <summary>

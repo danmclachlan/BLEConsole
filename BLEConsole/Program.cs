@@ -1,21 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.Eventing.Reader;
+using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
-using Windows.Devices.Enumeration;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
-using System.Reflection;
-using System.Threading;
-using System.Text.RegularExpressions;
-using System.Diagnostics.Eventing.Reader;
-using System.Runtime.InteropServices;
-using System.IO;
-using System.Text;
-using System.Security.Cryptography;
+using Windows.Devices.Enumeration;
 using Windows.Security.Cryptography;
 using Windows.Storage.Streams;
-using System.Diagnostics;
 
 namespace BLEConsole
 {
@@ -1148,11 +1149,11 @@ namespace BLEConsole
                             {
                                 //Console.Write($"\n*** WriteCharacteristic ({useName}) '{data}' ***\n");
                                 // Write data to characteristic
-                                GattWriteResult result = await attr.characteristic.WriteValueWithResultAsync(buffer);
-                                if (result.Status != GattCommunicationStatus.Success)
+                                var status = await Utilities.WriteCharacteristicAsync(attr.characteristic, buffer);
+                                if (status != GattCommunicationStatus.Success)
                                 {
                                     if (!Console.IsOutputRedirected)
-                                        Console.WriteLine($"Write failed: {result.Status} {Utilities.FormatProtocolError(result.ProtocolError)}");
+                                        Console.WriteLine($"Write failed: {status}");
                                     retVal += 1;
                                 }
                             }
